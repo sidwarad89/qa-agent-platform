@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/chatbot", tags=["chatbot"])
 #   PLATFORM_AI_API_KEY=<your Gemini key>
 #   PLATFORM_AI_MODEL=gemini-2.0-flash   (optional, this is the default)
 PLATFORM_AI_API_KEY = os.getenv("PLATFORM_AI_API_KEY", "")
-PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "gemini-2.5-flash")
+PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "gemini-3.6-flash")
 
 PLATFORM_KNOWLEDGE = """You are the in-app assistant for "QA Agent Builder", a platform for building AI-powered
 QA automation. Answer questions ONLY about how to use this platform - be concise and practical.
@@ -110,15 +110,42 @@ def generate_onboarding_plan(payload: OnboardingPlanRequest, current_user: User 
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not generate a plan: {exc}")
 
-    # Models sometimes wrap JSON in markdown fences or add stray text - extract the array robustly.
-    import json, re
-    match = re.search(r"\[.*\]", raw, re.DOTALL)
-    if not match:
-        raise HTTPException(status_code=502, detail="The AI didn't return a usable plan. Try rephrasing your goal.")
-    try:
-        parsed = json.loads(match.group(0))
-        steps = [PlanStep(title=s["title"], description=s["description"]) for s in parsed]
-    except Exception:
-        raise HTTPException(status_code=502, detail="The AI's plan wasn't in the expected format. Try again.")
-
+    steps = _parse_plan_response(raw)
+    if not steps:
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't parse a plan from that response. Try describing your goal in one or two clear sentences.",
+        )
     return OnboardingPlanResponse(steps=steps)
+
+
+def _parse_plan_response(raw: str):
+    """Tries JSON first (the format we asked for), then falls back to parsing a
+    plain numbered list, so a slightly-off model response still produces a usable plan."""
+    import json, re
+
+    cleaned = raw.strip()
+    cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
+    cleaned = re.sub(r"```$", "", cleaned).strip()
+
+    match = re.search(r"\[.*\]", cleaned, re.DOTALL)
+    if match:
+        try:
+            parsed = json.loads(match.group(0))
+            return [PlanStep(title=s["title"], description=s.get("description", "")) for s in parsed if s.get("title")]
+        except Exception:
+            pass  # fall through to the plain-text parser below
+
+    # Fallback: parse lines like "1. Title - description" or "1. Title: description"
+    steps = []
+    for line in cleaned.splitlines():
+        line = line.strip().lstrip("-*").strip()
+        line = re.sub(r"^\d+[.)]\s*", "", line)
+        if not line:
+            continue
+        parts = re.split(r"\s*[-:–]\s*", line, maxsplit=1)
+        title = parts[0].strip()
+        description = parts[1].strip() if len(parts) > 1 else ""
+        if title:
+            steps.append(PlanStep(title=title[:80], description=description))
+    return steps[:6]

@@ -49,12 +49,17 @@ export default function OnboardingGuide({ open, onClose }) {
         <div className="p-5 overflow-y-auto flex flex-col gap-4">
           {!steps ? (
             <>
-              <textarea
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm h-28"
-                placeholder="e.g. I want to automatically pull user stories from Jira, generate test cases with AI, and upload them to TestRail."
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-              />
+              <div className="flex flex-col gap-1">
+                <textarea
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm h-28"
+                  placeholder="Type your goal here..."
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                />
+                <p className="text-xs text-slate-400">
+                  Example: "I want to generate test cases based on a Jira user story and upload them to TestRail."
+                </p>
+              </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button
                 onClick={askForPlan}
