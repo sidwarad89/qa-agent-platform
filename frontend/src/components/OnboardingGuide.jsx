@@ -1,47 +1,33 @@
 import React, { useState } from 'react'
 import { FiX, FiArrowRight, FiCheckCircle, FiRefreshCw } from 'react-icons/fi'
-import { AI_MODELS, getProvider } from '../data/aiModels'
 import { generateOnboardingPlan } from '../api/client'
 
 const PROMPTS = [
   "What's your plan, buddy?",
   'What do you want to do?',
   'Give me your scope of work.',
-  "Explain your work so I can suggest how to use this platform effectively.",
+  'Explain your work so I can suggest how to use this platform effectively.',
 ]
 
 export default function OnboardingGuide({ open, onClose }) {
-  const [provider, setProvider] = useState(() => localStorage.getItem('qa_chatbot_provider') || '')
-  const [version, setVersion] = useState(() => localStorage.getItem('qa_chatbot_version') || '')
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('qa_chatbot_key') || '')
-  const [configuring, setConfiguring] = useState(!apiKey)
-
   const [goal, setGoal] = useState('')
   const [steps, setSteps] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const providerDef = getProvider(provider)
   const promptLine = PROMPTS[Math.floor((Date.now() / 60000) % PROMPTS.length)]
 
   if (!open) return null
-
-  const saveConfig = () => {
-    localStorage.setItem('qa_chatbot_provider', provider)
-    localStorage.setItem('qa_chatbot_version', version)
-    localStorage.setItem('qa_chatbot_key', apiKey)
-    setConfiguring(false)
-  }
 
   const askForPlan = async () => {
     if (!goal.trim()) return
     setLoading(true)
     setError('')
     try {
-      const result = await generateOnboardingPlan({ provider, model_version: version, api_key: apiKey, goal })
+      const result = await generateOnboardingPlan({ goal })
       setSteps(result.steps)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not generate a plan. Check your API key and try again.')
+      setError(err?.response?.data?.detail || 'Could not generate a plan. Try again in a moment.')
     } finally {
       setLoading(false)
     }
@@ -61,25 +47,7 @@ export default function OnboardingGuide({ open, onClose }) {
         </div>
 
         <div className="p-5 overflow-y-auto flex flex-col gap-4">
-          {configuring ? (
-            <>
-              <p className="text-xs text-slate-500">Pick an AI engine and paste your own API key to generate your plan — it's never stored on our server.</p>
-              <select className="border border-slate-300 rounded-lg px-3 py-2 text-sm" value={provider} onChange={(e) => { setProvider(e.target.value); setVersion('') }}>
-                <option value="">Select AI engine...</option>
-                {AI_MODELS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </select>
-              {providerDef && (
-                <select className="border border-slate-300 rounded-lg px-3 py-2 text-sm" value={version} onChange={(e) => setVersion(e.target.value)}>
-                  <option value="">Select version...</option>
-                  {providerDef.versions.map((v) => <option key={v.id} value={v.id}>{v.label}{v.free ? ' (Free tier)' : ''}</option>)}
-                </select>
-              )}
-              <input type="password" placeholder="API Token" className="border border-slate-300 rounded-lg px-3 py-2 text-sm" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-              <button onClick={saveConfig} disabled={!provider || !version || !apiKey} className="bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-40">
-                Continue
-              </button>
-            </>
-          ) : !steps ? (
+          {!steps ? (
             <>
               <textarea
                 className="border border-slate-300 rounded-lg px-3 py-2 text-sm h-28"
@@ -95,7 +63,6 @@ export default function OnboardingGuide({ open, onClose }) {
               >
                 {loading ? 'Thinking...' : <>Get my plan <FiArrowRight /></>}
               </button>
-              <button onClick={() => setConfiguring(true)} className="text-xs text-slate-400 self-start">Change AI engine / key</button>
             </>
           ) : (
             <>
