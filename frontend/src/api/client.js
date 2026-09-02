@@ -187,3 +187,8 @@ export async function sendChatbotMessage(payload) {
   const { data } = await api.post('/api/chatbot/message', payload)
   return data
 }
+
+export async function generateOnboardingPlan(payload) {
+  const { data } = await api.post('/api/chatbot/plan', payload)
+  return data
+}

@@ -48,6 +48,22 @@ class ChatbotResponse(BaseModel):
     reply: str
 
 
+class OnboardingPlanRequest(BaseModel):
+    provider: str
+    model_version: str
+    api_key: str
+    goal: str
+
+
+class PlanStep(BaseModel):
+    title: str
+    description: str
+
+
+class OnboardingPlanResponse(BaseModel):
+    steps: List[PlanStep]
+
+
 def _generate(provider: str, model_version: str, api_key: str, system: str, prompt: str) -> str:
     if provider == "anthropic":
         return anthropic_client.generate(api_key, model_version, system, prompt, max_tokens=800)
@@ -71,3 +87,35 @@ def send_message(payload: ChatbotRequest, current_user: User = Depends(get_curre
         raise HTTPException(status_code=502, detail=f"Chatbot request failed: {exc}")
 
     return ChatbotResponse(reply=reply)
+
+
+PLAN_SYSTEM_PROMPT = PLATFORM_KNOWLEDGE + """
+
+The user will describe their goal or scope of work. Turn that into a short, ordered, practical plan for
+using THIS platform specifically - reference real sections by name (Build, MCP Tools, Agentic Process,
+Profile). Keep it to 3-6 steps.
+
+Respond with ONLY a JSON array, nothing else, no markdown fences, in this exact shape:
+[{"title": "short imperative title", "description": "one or two sentences of practical detail"}]
+"""
+
+
+@router.post("/plan", response_model=OnboardingPlanResponse)
+def generate_onboarding_plan(payload: OnboardingPlanRequest, current_user: User = Depends(get_current_user)):
+    try:
+        raw = _generate(payload.provider, payload.model_version, payload.api_key, PLAN_SYSTEM_PROMPT, payload.goal)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not generate a plan: {exc}")
+
+    # Models sometimes wrap JSON in markdown fences or add stray text - extract the array robustly.
+    import json, re
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if not match:
+        raise HTTPException(status_code=502, detail="The AI didn't return a usable plan. Try rephrasing your goal.")
+    try:
+        parsed = json.loads(match.group(0))
+        steps = [PlanStep(title=s["title"], description=s["description"]) for s in parsed]
+    except Exception:
+        raise HTTPException(status_code=502, detail="The AI's plan wasn't in the expected format. Try again.")
+
+    return OnboardingPlanResponse(steps=steps)

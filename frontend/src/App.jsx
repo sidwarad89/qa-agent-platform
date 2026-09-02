@@ -9,6 +9,7 @@ import SignUp from './components/auth/SignUp'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 import ChatBotWidget from './components/ChatBotWidget'
+import OnboardingGuide from './components/OnboardingGuide'
 
 import MySpacePage from './pages/MySpacePage'
 import BuildPage from './pages/BuildPage'
@@ -23,8 +24,14 @@ function Console() {
   const { theme } = useTheme()
   const [active, setActive] = useState('myspace')
   const [chatOpen, setChatOpen] = useState(false)
+  const [onboardingOpen, setOnboardingOpen] = useState(() => !sessionStorage.getItem('qa_onboarding_shown'))
 
   useEffect(() => { trackVisit('/console') }, [])
+
+  const closeOnboarding = () => {
+    sessionStorage.setItem('qa_onboarding_shown', 'true')
+    setOnboardingOpen(false)
+  }
 
   const renderPage = () => {
     switch (active) {
@@ -33,8 +40,8 @@ function Console() {
       case 'mcp': return <McpPage />
       case 'agentic': return <AgenticProcessPage />
       case 'profile': return <ProfilePage />
-      case 'manage': return user?.isAdmin ? <ManagePage /> : <MySpacePage onNavigate={setActive} />
-      default: return <MySpacePage onNavigate={setActive} />
+      case 'manage': return user?.isAdmin ? <ManagePage /> : <MySpacePage onNavigate={setActive} onOpenGuide={() => setOnboardingOpen(true)} />
+      default: return <MySpacePage onNavigate={setActive} onOpenGuide={() => setOnboardingOpen(true)} />
     }
   }
 
@@ -54,6 +61,7 @@ function Console() {
         <main className="flex-1 overflow-y-auto">{renderPage()}</main>
       </div>
       <ChatBotWidget open={chatOpen} onClose={() => setChatOpen(false)} />
+      <OnboardingGuide open={onboardingOpen} onClose={closeOnboarding} />
     </div>
   )
 }

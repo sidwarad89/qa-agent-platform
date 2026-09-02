@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { FiTool, FiGrid, FiCheckCircle } from 'react-icons/fi'
+import { FiTool, FiGrid, FiCheckCircle, FiCompass } from 'react-icons/fi'
 import { fetchProfileStats } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { AgentIllustration, GoldenChainIllustration } from '../components/illustrations/Illustrations'
@@ -11,7 +11,7 @@ function getGreeting() {
   return 'Good Evening'
 }
 
-export default function MySpacePage({ onNavigate }) {
+export default function MySpacePage({ onNavigate, onOpenGuide }) {
   const { user } = useAuth()
   const [stats, setStats] = useState({ agents_count: 0, processes_count: 0, reviews_count: 0 })
 
@@ -25,6 +25,13 @@ export default function MySpacePage({ onNavigate }) {
         <h1 className="text-3xl font-bold text-slate-800">{getGreeting()}, {user?.username || 'there'}.</h1>
         <p className="text-slate-500 mt-1">Here's a quick look at what you've built so far.</p>
       </div>
+
+      <button
+        onClick={onOpenGuide}
+        className="self-start flex items-center gap-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-4 py-2.5"
+      >
+        <FiCompass /> Not sure where to start? Get a personalized step-by-step plan
+      </button>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard icon={FiTool} label="Agents Built" value={stats.agents_count} color="#6366f1" />
