@@ -99,15 +99,21 @@ of this platform (MCP Tools, Build, Agentic Process, Profile) and say exactly wh
 to what the user described. Never give steps like "write test cases" or "plan your testing strategy" in the
 abstract - those aren't things you do "on this platform" without naming where and how.
 
-Example:
-User goal: "I want to generate test cases from a Jira user story and upload them to TestRail."
-Correct output:
+Here is ONE EXAMPLE, shown ONLY so you understand the required JSON shape and level of specificity.
+Do NOT copy this example's content. It answers a different, unrelated user goal:
+
+EXAMPLE user goal: "I want to generate test cases from a Jira user story and upload them to TestRail."
+EXAMPLE output:
 [
   {"title": "Connect Jira under MCP Tools", "description": "Go to MCP Tools, click Connect on Jira, and enter your Jira URL, email, and API token so the platform can read your user stories."},
   {"title": "Connect TestRail under MCP Tools", "description": "In the same MCP Tools page, connect TestRail with your TestRail URL, email, and API key so generated test cases can be uploaded there."},
   {"title": "Build an agent for this workflow", "description": "Go to Build, name it something like 'Jira to TestRail Test Case Agent', pick your AI engine and language, and in the workflow prompt describe pulling the story, generating test cases, and uploading them to TestRail."},
   {"title": "Run it and check your Agents page", "description": "Click Build Agent, then check the Agents page afterward to confirm it was saved so you can reuse it later, including inside an Agentic Process."}
 ]
+
+END OF EXAMPLE. Now generate a brand-new plan for the REAL user goal given below (a completely different
+request from the example above - do not reuse any wording from the example). Base it entirely on what
+THIS user actually wrote.
 
 Keep it to 3-6 steps. Respond with ONLY a JSON array, nothing else, no markdown fences, in this exact shape:
 [{"title": "short imperative title", "description": "one or two sentences of practical, specific detail"}]
@@ -118,7 +124,7 @@ Keep it to 3-6 steps. Respond with ONLY a JSON array, nothing else, no markdown 
 def generate_onboarding_plan(payload: OnboardingPlanRequest, current_user: User = Depends(get_current_user)):
     _require_configured()
     try:
-        raw = _generate(PLAN_SYSTEM_PROMPT, payload.goal)
+        raw = _generate(PLAN_SYSTEM_PROMPT, f"REAL user goal: {payload.goal}", max_tokens=1200)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Could not generate a plan: {exc}")
 
@@ -155,9 +161,13 @@ def _parse_plan_response(raw: str):
         line = re.sub(r"^\d+[.)]\s*", "", line)
         if not line:
             continue
+        # Skip lines that are just raw JSON syntax - a sign the model's reply wasn't
+        # clean prose or clean JSON, and this line isn't a real step.
+        if re.fullmatch(r'[\[\]{},]*', line) or re.match(r'^"(title|description)"\s*:', line):
+            continue
         parts = re.split(r"\s*[-:–]\s*", line, maxsplit=1)
-        title = parts[0].strip()
-        description = parts[1].strip() if len(parts) > 1 else ""
-        if title:
+        title = parts[0].strip().strip('"').strip(",")
+        description = parts[1].strip().strip('"').strip(",") if len(parts) > 1 else ""
+        if title and len(title) > 2:
             steps.append(PlanStep(title=title[:80], description=description))
     return steps[:6]
