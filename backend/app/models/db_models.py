@@ -13,6 +13,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_admin = Column(Boolean, default=False)
+    avatar_data = Column(Text, nullable=True)  # base64 data URL, kept small (resized client-side)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login = Column(DateTime(timezone=True), nullable=True)
 
@@ -22,14 +23,17 @@ class User(Base):
 
 
 class AgentRecord(Base):
-    """One row per agent the user has built, used to power the profile stat."""
+    """One row per agent the user has built - stores enough config to actually
+    re-run this agent later (e.g. from inside an Agentic Process chain)."""
     __tablename__ = "agents"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=False)
     ai_provider = Column(String, nullable=True)
+    ai_model_version = Column(String, nullable=True)
     framework = Column(String, nullable=True)
+    workflow_prompt = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", back_populates="agents")

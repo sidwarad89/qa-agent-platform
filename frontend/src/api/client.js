@@ -75,6 +75,16 @@ export async function fetchCurrentUser() {
   return data
 }
 
+export async function updateProfilePicture(avatarDataUrl) {
+  const { data } = await api.patch('/api/auth/profile', { avatar_data: avatarDataUrl })
+  return data
+}
+
+export async function changePassword(payload) {
+  const { data } = await api.post('/api/auth/change-password', payload)
+  return data
+}
+
 // ---- Profile / stats / feedback -------------------------------------------
 
 export async function fetchProfileStats() {

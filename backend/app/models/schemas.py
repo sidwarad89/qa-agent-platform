@@ -83,11 +83,21 @@ class UserOut(BaseModel):
     username: str
     email: str
     is_admin: bool = False
+    avatar_data: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class ProfileUpdateRequest(BaseModel):
+    avatar_data: Optional[str] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 # --- Profile / stats / feedback -----------------------------------------
@@ -101,14 +111,18 @@ class ProfileStats(BaseModel):
 class AgentRecordCreate(BaseModel):
     name: str
     ai_provider: Optional[str] = None
+    ai_model_version: Optional[str] = None
     framework: Optional[str] = None
+    workflow_prompt: Optional[str] = None
 
 
 class AgentRecordOut(BaseModel):
     id: int
     name: str
     ai_provider: Optional[str] = None
+    ai_model_version: Optional[str] = None
     framework: Optional[str] = None
+    workflow_prompt: Optional[str] = None
     created_at: datetime
 
     class Config:

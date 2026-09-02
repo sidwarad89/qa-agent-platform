@@ -1,10 +1,10 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
-  FiPlus, FiTrash2, FiPlay, FiCheckCircle, FiRotateCcw, FiPaperclip, FiExternalLink, FiLink,
+  FiPlus, FiTrash2, FiPlay, FiCheckCircle, FiRotateCcw, FiPaperclip, FiExternalLink, FiLink, FiZap,
 } from 'react-icons/fi'
-import { AI_MODELS, getProvider } from '../data/aiModels'
-import { createAgenticProcess, runAgenticStep, approveAgenticStep } from '../api/client'
-import { AgenticProcessIllustration } from '../components/illustrations/Illustrations'
+import { fetchMyAgents, createAgenticProcess, runAgenticStep, approveAgenticStep } from '../api/client'
+import { getProvider } from '../data/aiModels'
+import { GoldenChainIllustration } from '../components/illustrations/Illustrations'
 
 const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json']
 
@@ -23,30 +23,37 @@ function readFileAsText(file) {
 }
 
 export default function AgenticProcessPage() {
+  const [myAgents, setMyAgents] = useState([])
   const [phase, setPhase] = useState('setup') // setup | running
   const [processName, setProcessName] = useState('')
-  const [provider, setProvider] = useState('anthropic')
-  const [version, setVersion] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [stepDefs, setStepDefs] = useState([
-    { name: 'Generate test scenarios', prompt: '', mcpEnabled: false, mcp: { base_url: '', username: '', api_key: '', project_key: '', parent_item_id: '' } },
-  ])
+
+  // chain: [{ agentId, hilEnabled, mcpEnabled, mcp: {...} }]
+  const [chain, setChain] = useState([])
+  const [apiKeys, setApiKeys] = useState({}) // { [provider]: key }
 
   const [processId, setProcessId] = useState(null)
-  // per step: { output, output_url, status, feedback, fileNote, fileName, running, commentTouched }
+  // per index: { output, output_url, status, feedback, fileNote, fileName, running, commentTouched, error }
   const [runtimeSteps, setRuntimeSteps] = useState([])
 
-  const providerDef = getProvider(provider)
+  useEffect(() => { fetchMyAgents().then(setMyAgents).catch(() => {}) }, [])
 
-  const addStepDef = () => setStepDefs((s) => [...s, {
-    name: `Step ${s.length + 1}`, prompt: '', mcpEnabled: false,
+  const getAgent = (id) => myAgents.find((a) => a.id === Number(id))
+
+  const addChainItem = () => setChain((c) => [...c, {
+    agentId: myAgents[0]?.id || '', hilEnabled: true, mcpEnabled: false,
     mcp: { base_url: '', username: '', api_key: '', project_key: '', parent_item_id: '' },
   }])
-  const removeStepDef = (i) => setStepDefs((s) => s.filter((_, idx) => idx !== i))
-  const updateStepDef = (i, key, value) => setStepDefs((s) => s.map((st, idx) => (idx === i ? { ...st, [key]: value } : st)))
-  const updateStepMcp = (i, key, value) => setStepDefs((s) => s.map((st, idx) => (idx === i ? { ...st, mcp: { ...st.mcp, [key]: value } } : st)))
+  const removeChainItem = (i) => setChain((c) => c.filter((_, idx) => idx !== i))
+  const updateChainItem = (i, key, value) => setChain((c) => c.map((item, idx) => (idx === i ? { ...item, [key]: value } : item)))
+  const updateChainMcp = (i, key, value) => setChain((c) => c.map((item, idx) => (idx === i ? { ...item, mcp: { ...item.mcp, [key]: value } } : item)))
+
+  const usedProviders = [...new Set(chain.map((c) => getAgent(c.agentId)?.ai_provider).filter(Boolean))]
 
   const runStep = async (index, feedback = null) => {
+    const item = chain[index]
+    const agent = getAgent(item.agentId)
+    if (!agent) return
+
     setRuntimeSteps((rs) => {
       const copy = [...rs]
       copy[index] = { ...(copy[index] || {}), running: true }
@@ -54,21 +61,20 @@ export default function AgenticProcessPage() {
     })
 
     const previousOutput = index > 0 ? runtimeSteps[index - 1]?.output : null
-    const def = stepDefs[index]
 
     try {
       const result = await runAgenticStep(processId, {
         step_index: index,
-        step_name: def.name,
-        prompt: def.prompt,
-        ai_provider: provider,
-        ai_model_version: version,
-        ai_api_key: apiKey,
+        step_name: agent.name,
+        prompt: agent.workflow_prompt || `Act as "${agent.name}" and produce its output.`,
+        ai_provider: agent.ai_provider,
+        ai_model_version: agent.ai_model_version,
+        ai_api_key: apiKeys[agent.ai_provider] || '',
         previous_output: previousOutput,
         feedback,
-        mcp_tool: def.mcpEnabled ? 'jira' : null,
-        mcp_credentials: def.mcpEnabled ? def.mcp : null,
-        mcp_parent_item_id: def.mcpEnabled ? def.mcp.parent_item_id : null,
+        mcp_tool: item.mcpEnabled ? 'jira' : null,
+        mcp_credentials: item.mcpEnabled ? item.mcp : null,
+        mcp_parent_item_id: item.mcpEnabled ? item.mcp.parent_item_id : null,
       })
       setRuntimeSteps((rs) => {
         const copy = [...rs]
@@ -78,6 +84,15 @@ export default function AgenticProcessPage() {
         }
         return copy
       })
+
+      if (!item.hilEnabled) {
+        // No checkpoint here - auto-approve and continue straight to the next agent.
+        await approveAgenticStep(processId, index)
+        setRuntimeSteps((rs) => {
+          const copy = [...rs]; copy[index] = { ...copy[index], status: 'approved' }; return copy
+        })
+        if (index + 1 < chain.length) await runStep(index + 1)
+      }
     } catch (err) {
       setRuntimeSteps((rs) => {
         const copy = [...rs]
@@ -91,20 +106,16 @@ export default function AgenticProcessPage() {
     const proc = await createAgenticProcess(processName || 'Untitled Process')
     setProcessId(proc.id)
     setPhase('running')
-    setRuntimeSteps(stepDefs.map(() => ({})))
+    setRuntimeSteps(chain.map(() => ({})))
     await runStep(0)
   }
 
   const handleGoodToGo = async (index) => {
     await approveAgenticStep(processId, index)
     setRuntimeSteps((rs) => {
-      const copy = [...rs]
-      copy[index] = { ...copy[index], status: 'approved' }
-      return copy
+      const copy = [...rs]; copy[index] = { ...copy[index], status: 'approved' }; return copy
     })
-    if (index + 1 < stepDefs.length) {
-      await runStep(index + 1)
-    }
+    if (index + 1 < chain.length) await runStep(index + 1)
   }
 
   const handleReExecute = async (index) => {
@@ -117,18 +128,25 @@ export default function AgenticProcessPage() {
     if (!file) return
     const note = await readFileAsText(file)
     setRuntimeSteps((rs) => {
-      const copy = [...rs]
-      copy[index] = { ...copy[index], fileNote: note, fileName: file.name }
-      return copy
+      const copy = [...rs]; copy[index] = { ...copy[index], fileNote: note, fileName: file.name }; return copy
     })
   }
 
   const touchComment = (index) => {
     setRuntimeSteps((rs) => {
-      const copy = [...rs]
-      copy[index] = { ...copy[index], commentTouched: true }
-      return copy
+      const copy = [...rs]; copy[index] = { ...copy[index], commentTouched: true }; return copy
     })
+  }
+
+  // ---- No agents built yet ----
+  if (myAgents.length === 0 && phase === 'setup') {
+    return (
+      <div className="max-w-2xl mx-auto py-16 px-6 flex flex-col items-center text-center gap-4">
+        <GoldenChainIllustration className="w-48 h-24" />
+        <h1 className="text-2xl font-bold text-slate-800">No agents to chain yet</h1>
+        <p className="text-slate-500 text-sm">Build at least one agent first — Agentic Process links your already-built agents together.</p>
+      </div>
+    )
   }
 
   // ---- Setup screen ----
@@ -136,12 +154,12 @@ export default function AgenticProcessPage() {
     return (
       <div className="max-w-3xl mx-auto py-10 px-6 flex flex-col gap-6">
         <div className="flex items-start gap-4">
-          <AgenticProcessIllustration className="w-32 h-20 shrink-0" />
+          <GoldenChainIllustration className="w-32 h-20 shrink-0" />
           <div>
             <h1 className="text-2xl font-bold text-slate-800">New Agentic Process</h1>
             <p className="text-slate-500 text-sm mt-1">
-              Chain agents together. After each step, verify the output (in Jira if connected), then choose
-              "Good to go" to continue — or leave feedback and click "Re-Execute" to regenerate that step.
+              Chain your already-built agents together. Add a Human-in-Loop checkpoint wherever you want to review
+              before continuing — skip it anywhere you want the chain to run straight through.
             </p>
           </div>
         </div>
@@ -149,73 +167,90 @@ export default function AgenticProcessPage() {
         <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-slate-600">Process name</label>
-            <input className="border border-slate-300 rounded-lg px-3 py-2" value={processName} onChange={(e) => setProcessName(e.target.value)} placeholder="e.g. Scenario → Test Case → Script pipeline" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-600">AI Provider</label>
-              <select className="border border-slate-300 rounded-lg px-3 py-2" value={provider} onChange={(e) => { setProvider(e.target.value); setVersion('') }}>
-                {AI_MODELS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-slate-600">Model version</label>
-              <select className="border border-slate-300 rounded-lg px-3 py-2" value={version} onChange={(e) => setVersion(e.target.value)}>
-                <option value="">Select...</option>
-                {providerDef?.versions.map((v) => <option key={v.id} value={v.id}>{v.label}{v.free ? ' (Free tier)' : ''}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-slate-600">API Key</label>
-            <input type="password" className="border border-slate-300 rounded-lg px-3 py-2" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={providerDef?.keyFormatHint} />
+            <input className="border border-slate-300 rounded-lg px-3 py-2" value={processName} onChange={(e) => setProcessName(e.target.value)} placeholder="e.g. Scenario → Test Case → Uploader pipeline" />
           </div>
         </div>
 
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-800">Agent Steps</h2>
-            <button onClick={addStepDef} className="text-sm text-indigo-600 flex items-center gap-1"><FiPlus /> Add step</button>
+            <h2 className="font-semibold text-slate-800">Agent Chain</h2>
+            <button onClick={addChainItem} className="text-sm text-indigo-600 flex items-center gap-1"><FiPlus /> Add agent</button>
           </div>
-          {stepDefs.map((s, i) => (
-            <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                <input className="flex-1 border-b border-slate-200 px-1 py-1 text-sm font-medium" value={s.name} onChange={(e) => updateStepDef(i, 'name', e.target.value)} />
-                {stepDefs.length > 1 && (
-                  <button onClick={() => removeStepDef(i)} className="text-slate-400 hover:text-red-500"><FiTrash2 size={14} /></button>
+
+          {chain.length === 0 && (
+            <p className="text-sm text-slate-400 bg-white border border-dashed border-slate-300 rounded-xl p-6 text-center">
+              Click "Add agent" to pick your first agent from the ones you've built.
+            </p>
+          )}
+
+          {chain.map((item, i) => {
+            const agent = getAgent(item.agentId)
+            return (
+              <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                  <select
+                    className="flex-1 border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
+                    value={item.agentId}
+                    onChange={(e) => updateChainItem(i, 'agentId', e.target.value)}
+                  >
+                    {myAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                  <button onClick={() => removeChainItem(i)} className="text-slate-400 hover:text-red-500"><FiTrash2 size={14} /></button>
+                </div>
+                {agent && (
+                  <p className="text-xs text-slate-400 pl-8">{agent.ai_provider} · {agent.ai_model_version}</p>
+                )}
+
+                <label className="flex items-center gap-2 text-xs text-slate-600 pl-8">
+                  <input type="checkbox" checked={item.hilEnabled} onChange={(e) => updateChainItem(i, 'hilEnabled', e.target.checked)} />
+                  Add Human-in-Loop checkpoint after this agent (pause for review)
+                </label>
+                {!item.hilEnabled && (
+                  <p className="text-xs text-slate-400 pl-8 flex items-center gap-1"><FiZap size={11} /> Will auto-continue straight to the next agent</p>
+                )}
+
+                <label className="flex items-center gap-2 text-xs text-slate-500 pl-8">
+                  <input type="checkbox" checked={item.mcpEnabled} onChange={(e) => updateChainItem(i, 'mcpEnabled', e.target.checked)} />
+                  <FiLink size={12} /> Also push this agent's output into Jira as a subtask
+                </label>
+                {item.mcpEnabled && (
+                  <div className="grid grid-cols-2 gap-2 ml-8 bg-slate-50 rounded-lg p-3">
+                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs col-span-2" placeholder="Jira Base URL" value={item.mcp.base_url} onChange={(e) => updateChainMcp(i, 'base_url', e.target.value)} />
+                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Email" value={item.mcp.username} onChange={(e) => updateChainMcp(i, 'username', e.target.value)} />
+                    <input type="password" className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="API Token" value={item.mcp.api_key} onChange={(e) => updateChainMcp(i, 'api_key', e.target.value)} />
+                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Project Key" value={item.mcp.project_key} onChange={(e) => updateChainMcp(i, 'project_key', e.target.value)} />
+                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Parent Issue ID" value={item.mcp.parent_item_id} onChange={(e) => updateChainMcp(i, 'parent_item_id', e.target.value)} />
+                  </div>
                 )}
               </div>
-              <textarea
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm h-20"
-                placeholder="What should this agent do? (e.g. Generate 10-15 test scenarios covering positive, negative, and edge cases for the login flow.)"
-                value={s.prompt}
-                onChange={(e) => updateStepDef(i, 'prompt', e.target.value)}
-              />
-
-              <label className="flex items-center gap-2 text-xs text-slate-500 mt-1">
-                <input type="checkbox" checked={s.mcpEnabled} onChange={(e) => updateStepDef(i, 'mcpEnabled', e.target.checked)} />
-                <FiLink size={12} /> Also push this step's output into Jira as a subtask (for the Verify step)
-              </label>
-
-              {s.mcpEnabled && (
-                <div className="grid grid-cols-2 gap-2 mt-1 bg-slate-50 rounded-lg p-3">
-                  <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs col-span-2" placeholder="Jira Base URL (https://yourorg.atlassian.net)" value={s.mcp.base_url} onChange={(e) => updateStepMcp(i, 'base_url', e.target.value)} />
-                  <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Email" value={s.mcp.username} onChange={(e) => updateStepMcp(i, 'username', e.target.value)} />
-                  <input type="password" className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="API Token" value={s.mcp.api_key} onChange={(e) => updateStepMcp(i, 'api_key', e.target.value)} />
-                  <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Project Key (e.g. QA)" value={s.mcp.project_key} onChange={(e) => updateStepMcp(i, 'project_key', e.target.value)} />
-                  <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Parent Issue ID (e.g. QA-12)" value={s.mcp.parent_item_id} onChange={(e) => updateStepMcp(i, 'parent_item_id', e.target.value)} />
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
+
+        {usedProviders.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
+            <h2 className="font-semibold text-slate-800 text-sm">API Keys</h2>
+            <p className="text-xs text-slate-500 -mt-2">One key per AI engine used by the agents in this chain.</p>
+            {usedProviders.map((p) => {
+              const def = getProvider(p)
+              return (
+                <div key={p} className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-600">{def?.label || p}</label>
+                  <input
+                    type="password" className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                    value={apiKeys[p] || ''} onChange={(e) => setApiKeys((k) => ({ ...k, [p]: e.target.value }))}
+                    placeholder={def?.keyFormatHint}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         <button
           onClick={startProcess}
-          disabled={!processName || !version || !apiKey || stepDefs.some((s) => !s.prompt)}
+          disabled={!processName || chain.length === 0 || usedProviders.some((p) => !apiKeys[p])}
           className="self-start px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold disabled:opacity-40 flex items-center gap-2"
         >
           <FiPlay /> Start Process
@@ -229,7 +264,8 @@ export default function AgenticProcessPage() {
     <div className="max-w-3xl mx-auto py-10 px-6 flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-slate-800">{processName}</h1>
 
-      {stepDefs.map((def, i) => {
+      {chain.map((item, i) => {
+        const agent = getAgent(item.agentId)
         const rs = runtimeSteps[i] || {}
         if (!rs.output && !rs.running && !rs.error) return null // not reached yet
         const hasFeedback = !!(rs.feedback || rs.fileNote)
@@ -239,8 +275,9 @@ export default function AgenticProcessPage() {
           <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center">{i + 1}</span>
-              <h3 className="font-semibold text-slate-800">{def.name}</h3>
+              <h3 className="font-semibold text-slate-800">{agent?.name}</h3>
               {rs.status === 'approved' && <span className="text-xs text-emerald-600 flex items-center gap-1 ml-auto"><FiCheckCircle /> Approved</span>}
+              {!item.hilEnabled && rs.status === 'approved' && <span className="text-xs text-slate-400 flex items-center gap-1"><FiZap size={11} /> auto-continued</span>}
             </div>
 
             {rs.running && <p className="text-sm text-slate-400">Running agent...</p>}
@@ -261,7 +298,7 @@ export default function AgenticProcessPage() {
                   </div>
                 )}
 
-                {rs.status === 'awaiting_review' && (
+                {item.hilEnabled && rs.status === 'awaiting_review' && (
                   <div className="flex flex-col gap-3 border-t border-slate-100 pt-3">
                     <p className="text-xs font-medium text-slate-500">
                       {rs.output_url
@@ -313,9 +350,9 @@ export default function AgenticProcessPage() {
         )
       })}
 
-      {runtimeSteps[stepDefs.length - 1]?.status === 'approved' && (
+      {runtimeSteps[chain.length - 1]?.status === 'approved' && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 text-emerald-700 text-sm font-medium">
-          🎉 Process complete — every step has been approved.
+          🎉 Process complete — every agent in the chain has run.
         </div>
       )}
     </div>

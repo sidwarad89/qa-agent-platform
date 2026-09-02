@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { FiTool, FiGrid, FiCheckCircle } from 'react-icons/fi'
 import { fetchProfileStats } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { AgentIllustration, AgenticProcessIllustration } from '../components/illustrations/Illustrations'
+import { AgentIllustration, GoldenChainIllustration } from '../components/illustrations/Illustrations'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -45,7 +45,7 @@ export default function MySpacePage({ onNavigate }) {
           onClick={() => onNavigate('agentic')}
           className="text-left bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow flex flex-col gap-2"
         >
-          <AgenticProcessIllustration className="w-full h-24" />
+          <GoldenChainIllustration className="w-full h-24" />
           <h3 className="font-semibold text-slate-800 mb-1">Start an Agentic Process</h3>
           <p className="text-sm text-slate-500">Chain multiple agents together with human-in-the-loop review.</p>
         </button>

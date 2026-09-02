@@ -23,6 +23,7 @@ const PLACEHOLDER = `e.g. "Pull user story QA-12 from Jira (connected under MCP 
 
 export default function BuildPage({ onNavigate }) {
   const { config, updateConfig } = useAgentConfig()
+  const [agentName, setAgentName] = useState('')
 
   const provider = getProvider(config.ai_provider)
   const selectedVersion = provider?.versions.find((v) => v.id === config.ai_model_version)
@@ -53,6 +54,7 @@ export default function BuildPage({ onNavigate }) {
   const [running, setRunning] = useState(false)
 
   const progressItems = [
+    { label: 'Agent Name', done: !!agentName.trim() },
     { label: 'AI Engine', done: !!config.ai_validated },
     { label: 'Language', done: !!config.language },
     { label: 'Framework', done: !!config.framework },
@@ -66,7 +68,13 @@ export default function BuildPage({ onNavigate }) {
     setRunning(true)
 
     try {
-      await recordAgentBuilt({ name: config.workflow_prompt.slice(0, 60) || 'Untitled Agent', ai_provider: config.ai_provider, framework: config.framework })
+      await recordAgentBuilt({
+        name: agentName.trim() || 'Untitled Agent',
+        ai_provider: config.ai_provider,
+        ai_model_version: config.ai_model_version,
+        framework: config.framework,
+        workflow_prompt: config.workflow_prompt,
+      })
     } catch {
       // non-critical — profile stat just won't increment if this fails
     }
@@ -106,6 +114,17 @@ export default function BuildPage({ onNavigate }) {
           and just mention the action in your workflow prompt below.
         </p>
       </header>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-2">
+        <label className="text-sm font-medium text-slate-600">Agent Name</label>
+        <input
+          className="border border-slate-300 rounded-lg px-3 py-2 w-full sm:w-96"
+          placeholder="e.g. Test Scenario Generator Agent"
+          value={agentName}
+          onChange={(e) => setAgentName(e.target.value)}
+        />
+        <p className="text-xs text-slate-400">Give it a clear name — this is how you'll pick it later when chaining agents in an Agentic Process.</p>
+      </div>
 
       <ProgressOverview items={progressItems} />
 

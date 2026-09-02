@@ -64,3 +64,28 @@ export function AgenticProcessIllustration({ className = 'w-full h-32' }) {
     </svg>
   )
 }
+
+export function GoldenChainIllustration({ className = 'w-full h-32' }) {
+  const linkStyle = { fill: 'none', stroke: 'url(#goldGrad)', strokeWidth: 9, strokeLinecap: 'round' }
+  return (
+    <svg viewBox="0 0 200 100" className={className}>
+      <defs>
+        <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fde68a" />
+          <stop offset="45%" stopColor="#f59e0b" />
+          <stop offset="100%" stopColor="#b45309" />
+        </linearGradient>
+        <linearGradient id="goldShine" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#fff7d6" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#fff7d6" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="45" cy="50" rx="26" ry="17" style={linkStyle} />
+      <ellipse cx="80" cy="50" rx="17" ry="26" style={linkStyle} />
+      <ellipse cx="115" cy="50" rx="26" ry="17" style={linkStyle} />
+      <ellipse cx="150" cy="50" rx="17" ry="26" style={linkStyle} />
+      <ellipse cx="45" cy="42" rx="24" ry="7" fill="url(#goldShine)" opacity="0.6" />
+      <ellipse cx="115" cy="42" rx="24" ry="7" fill="url(#goldShine)" opacity="0.6" />
+    </svg>
+  )
+}

@@ -27,12 +27,15 @@ def record_agent(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Called once, right when the user clicks 'Build Agent' - powers the Agents stat."""
+    """Called once, right when the user clicks 'Build Agent' - powers the Agents stat
+    and stores enough config for this agent to be reused inside an Agentic Process."""
     record = AgentRecord(
         user_id=current_user.id,
         name=payload.name,
         ai_provider=payload.ai_provider,
+        ai_model_version=payload.ai_model_version,
         framework=payload.framework,
+        workflow_prompt=payload.workflow_prompt,
     )
     db.add(record)
     db.commit()

@@ -1,21 +1,22 @@
 import React, { useState } from 'react'
 import {
-  FiHome, FiTool, FiShare2, FiGrid, FiUser, FiLogOut, FiMessageSquare, FiShield, FiCpu, FiDroplet,
+  FiHome, FiTool, FiShare2, FiUser, FiLogOut, FiMessageSquare, FiShield, FiCpu, FiDroplet, FiSettings,
 } from 'react-icons/fi'
 import { useTheme, THEMES } from '../../context/ThemeContext'
+import { GoldenChainIllustration } from '../illustrations/Illustrations'
 
 const NAV_ITEMS = [
   { id: 'myspace', label: 'My Space', icon: FiHome },
   { id: 'build', label: 'Build', icon: FiTool },
   { id: 'agents', label: 'Agents', icon: FiCpu },
   { id: 'mcp', label: 'MCP Tools', icon: FiShare2 },
-  { id: 'agentic', label: 'Agentic Process', icon: FiGrid },
-  { id: 'profile', label: 'Profile', icon: FiUser },
+  { id: 'agentic', label: 'Agentic Process', icon: 'golden-chain' },
 ]
 
-export default function Sidebar({ active, onNavigate, username, isAdmin, onLogout, onToggleChat }) {
-  const { theme, themeId, setThemeId } = useTheme()
+export default function Sidebar({ active, onNavigate, username, avatarUrl, isAdmin, onLogout, onToggleChat }) {
+  const { themeId, setThemeId } = useTheme()
   const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const items = isAdmin ? [...NAV_ITEMS, { id: 'manage', label: 'Manage', icon: FiShield }] : NAV_ITEMS
 
   return (
@@ -24,7 +25,6 @@ export default function Sidebar({ active, onNavigate, username, isAdmin, onLogou
 
       <nav className="flex-1 flex flex-col gap-1 items-center overflow-y-auto">
         {items.map((item) => {
-          const Icon = item.icon
           const isActive = active === item.id
           return (
             <button
@@ -35,7 +35,11 @@ export default function Sidebar({ active, onNavigate, username, isAdmin, onLogou
                 isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
             >
-              <Icon size={18} />
+              {item.icon === 'golden-chain' ? (
+                <GoldenChainIllustration className="w-6 h-4" />
+              ) : (
+                <item.icon size={18} />
+              )}
               <span className="text-[9px] leading-none text-center px-1">{item.label}</span>
             </button>
           )
@@ -81,13 +85,33 @@ export default function Sidebar({ active, onNavigate, username, isAdmin, onLogou
         )}
       </div>
 
-      <div className="flex flex-col items-center gap-2 pt-2 border-t border-slate-800 w-full shrink-0">
-        <div className="w-9 h-9 rounded-full bg-indigo-500 text-white flex items-center justify-center text-sm font-semibold">
-          {username?.[0]?.toUpperCase() || 'U'}
-        </div>
-        <button onClick={onLogout} title="Log out" className="text-slate-500 hover:text-red-400">
-          <FiLogOut size={16} />
+      <div className="relative shrink-0 pt-2 border-t border-slate-800 w-full flex justify-center">
+        <button onClick={() => setProfileMenuOpen((o) => !o)} title="Profile" className="w-9 h-9 rounded-full overflow-hidden">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-indigo-500 text-white flex items-center justify-center text-sm font-semibold">
+              {username?.[0]?.toUpperCase() || 'U'}
+            </div>
+          )}
         </button>
+        {profileMenuOpen && (
+          <div className="absolute bottom-0 left-16 bg-white rounded-xl shadow-xl border border-slate-200 py-2 w-48 z-50">
+            <p className="px-3 pb-2 mb-1 border-b border-slate-100 text-sm font-medium text-slate-700 truncate">{username}</p>
+            <button
+              onClick={() => { onNavigate('profile'); setProfileMenuOpen(false) }}
+              className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+            >
+              <FiSettings size={14} /> Profile Settings
+            </button>
+            <button
+              onClick={onLogout}
+              className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+            >
+              <FiLogOut size={14} /> Log Out
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   )

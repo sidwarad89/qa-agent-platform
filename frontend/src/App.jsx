@@ -44,6 +44,7 @@ function Console() {
         active={active}
         onNavigate={setActive}
         username={user?.username}
+        avatarUrl={user?.avatarUrl}
         isAdmin={user?.isAdmin}
         onLogout={logoutUser}
         onToggleChat={() => setChatOpen((c) => !c)}
