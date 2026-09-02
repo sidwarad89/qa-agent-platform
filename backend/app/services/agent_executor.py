@@ -6,19 +6,35 @@ import uuid
 from app.models.schemas import AgentConfig
 from app.services.prompt_parser import parse_workflow
 from app.services import code_generator
-from app.services.ai_providers import anthropic_client, openai_client, gemini_client
+from app.services.ai_providers import anthropic_client, openai_client, gemini_client, openai_compatible_client
 from app.services.connectors.jira_connector import JiraConnector
 from app.services.connectors.ado_connector import ADOConnector
 from app.services.connectors.testrail_connector import TestRailConnector
 from app.services.connectors.github_connector import GitHubConnector
 
+_OPENAI_COMPATIBLE_PROVIDERS = {"mistral", "xai", "groq", "deepseek", "together", "perplexity"}
+
+
+class _CompatClientWrapper:
+    """Lets openai_compatible_client be called with the same generate(...) signature as the native clients."""
+    def __init__(self, provider):
+        self.provider = provider
+
+    def generate(self, api_key, model_version, system, prompt, max_tokens=2000):
+        return openai_compatible_client.generate(api_key, model_version, system, prompt, max_tokens, provider=self.provider)
+
 
 def _ai_client_for(provider: str):
-    return {
+    native = {
         "anthropic": anthropic_client,
         "openai": openai_client,
         "gemini": gemini_client,
-    }[provider]
+    }
+    if provider in native:
+        return native[provider]
+    if provider in _OPENAI_COMPATIBLE_PROVIDERS:
+        return _CompatClientWrapper(provider)
+    raise ValueError(f"Unknown AI provider: {provider}")
 
 
 def _build_input_connector(cfg: AgentConfig):

@@ -1,9 +1,14 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import models, pm_tools, output_tools, agent
+from app.routers import models, pm_tools, output_tools, agent, auth, profile, mcp, agentic_process
+from app.database import Base, engine
+from app.models import db_models  # noqa: F401 - imported so tables register on Base
 
 app = FastAPI(title="QA Agent Builder Platform")
+
+# Creates any tables that don't exist yet. Safe to run on every startup.
+Base.metadata.create_all(bind=engine)
 
 # Set ALLOWED_ORIGINS as a comma-separated env var in production, e.g.
 # ALLOWED_ORIGINS=https://your-frontend.vercel.app,http://localhost:5173
@@ -22,6 +27,10 @@ app.include_router(models.router)
 app.include_router(pm_tools.router)
 app.include_router(output_tools.router)
 app.include_router(agent.router)
+app.include_router(auth.router)
+app.include_router(profile.router)
+app.include_router(mcp.router)
+app.include_router(agentic_process.router)
 
 
 @app.get("/api/health")
