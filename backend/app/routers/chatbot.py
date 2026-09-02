@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/chatbot", tags=["chatbot"])
 #   PLATFORM_AI_API_KEY=<your Gemini key>
 #   PLATFORM_AI_MODEL=gemini-2.0-flash   (optional, this is the default)
 PLATFORM_AI_API_KEY = os.getenv("PLATFORM_AI_API_KEY", "")
-PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "gemini-2.0-flash")
+PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "gemini-2.5-flash")
 
 PLATFORM_KNOWLEDGE = """You are the in-app assistant for "QA Agent Builder", a platform for building AI-powered
 QA automation. Answer questions ONLY about how to use this platform - be concise and practical.

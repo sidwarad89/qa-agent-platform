@@ -60,7 +60,7 @@ export const AI_MODELS = [
     versions: [
       { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', free: true, bestFor: ['Reasoning', 'Large context (docs/codebases)'] },
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', free: true, bestFor: ['Fast + cheap', 'High-volume tasks'] },
-      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', free: true, bestFor: ['General purpose', 'Free-tier friendly'] },
+      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', free: true, bestFor: ['General purpose', 'Free-tier friendly'] },
     ],
   },
   {
