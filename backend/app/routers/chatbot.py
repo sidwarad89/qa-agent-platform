@@ -93,12 +93,24 @@ def send_message(payload: ChatbotRequest, current_user: User = Depends(get_curre
 
 PLAN_SYSTEM_PROMPT = PLATFORM_KNOWLEDGE + """
 
-The user will describe their goal or scope of work. Turn that into a short, ordered, practical plan for
-using THIS platform specifically - reference real sections by name (Build, MCP Tools, Agentic Process,
-Profile). Keep it to 3-6 steps.
+The user will describe their goal or scope of work, in their own casual words. Turn that into a short,
+ordered, PRACTICAL, PLATFORM-SPECIFIC plan - not generic QA advice. Every step must name an actual section
+of this platform (MCP Tools, Build, Agentic Process, Profile) and say exactly what to do inside it, tailored
+to what the user described. Never give steps like "write test cases" or "plan your testing strategy" in the
+abstract - those aren't things you do "on this platform" without naming where and how.
 
-Respond with ONLY a JSON array, nothing else, no markdown fences, in this exact shape:
-[{"title": "short imperative title", "description": "one or two sentences of practical detail"}]
+Example:
+User goal: "I want to generate test cases from a Jira user story and upload them to TestRail."
+Correct output:
+[
+  {"title": "Connect Jira under MCP Tools", "description": "Go to MCP Tools, click Connect on Jira, and enter your Jira URL, email, and API token so the platform can read your user stories."},
+  {"title": "Connect TestRail under MCP Tools", "description": "In the same MCP Tools page, connect TestRail with your TestRail URL, email, and API key so generated test cases can be uploaded there."},
+  {"title": "Build an agent for this workflow", "description": "Go to Build, name it something like 'Jira to TestRail Test Case Agent', pick your AI engine and language, and in the workflow prompt describe pulling the story, generating test cases, and uploading them to TestRail."},
+  {"title": "Run it and check your Agents page", "description": "Click Build Agent, then check the Agents page afterward to confirm it was saved so you can reuse it later, including inside an Agentic Process."}
+]
+
+Keep it to 3-6 steps. Respond with ONLY a JSON array, nothing else, no markdown fences, in this exact shape:
+[{"title": "short imperative title", "description": "one or two sentences of practical, specific detail"}]
 """
 
 
