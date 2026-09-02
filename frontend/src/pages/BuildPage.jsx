@@ -113,15 +113,14 @@ export default function BuildPage({ onNavigate }) {
         {/* 1. AI Engine */}
         <SectionCard index={1} title="Choose AI Engine" subtitle="Model provider, version, and API token" accent="#8b5cf6" icon={FiCpu} done={!!config.ai_validated}>
           <div className="flex flex-col gap-4">
-            <div className="flex gap-3 flex-wrap">
-              {AI_MODELS.map((p) => (
-                <ChoiceCard
-                  key={p.id} label={p.label} accent="step1"
-                  selected={config.ai_provider === p.id}
-                  onClick={() => updateConfig({ ai_provider: p.id, ai_model_version: '', ai_validated: false })}
-                />
-              ))}
-            </div>
+            <select
+              className="border border-slate-300 rounded-lg px-3 py-2 w-full"
+              value={config.ai_provider}
+              onChange={(e) => updateConfig({ ai_provider: e.target.value, ai_model_version: '', ai_validated: false })}
+            >
+              <option value="">Select an AI engine...</option>
+              {AI_MODELS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
 
             {provider && (
               <div className="flex flex-col gap-2">
@@ -180,29 +179,27 @@ export default function BuildPage({ onNavigate }) {
 
         {/* 2. Language */}
         <SectionCard index={2} title="Choose Coding Language" subtitle="Language your automation scripts will be generated in" accent="#f59e0b" icon={FiCode} done={!!config.language}>
-          <div className="flex gap-3 flex-wrap">
-            {LANGUAGES.map((l) => (
-              <ChoiceCard
-                key={l.id} label={l.label} accent="step2"
-                selected={config.language === l.label}
-                onClick={() => updateConfig({ language: l.label })}
-              />
-            ))}
-          </div>
+          <select
+            className="border border-slate-300 rounded-lg px-3 py-2 w-full"
+            value={config.language}
+            onChange={(e) => updateConfig({ language: e.target.value })}
+          >
+            <option value="">Select a language...</option>
+            {LANGUAGES.map((l) => <option key={l.id} value={l.label}>{l.label}</option>)}
+          </select>
         </SectionCard>
 
         {/* 3. Framework */}
         <SectionCard index={3} title="Choose Testing Framework" subtitle="See a live sample the moment you pick one" accent="#ec4899" icon={FiLayers} done={!!config.framework}>
           <div className="flex flex-col gap-4">
-            <div className="flex gap-3 flex-wrap">
-              {FRAMEWORKS.map((f) => (
-                <ChoiceCard
-                  key={f.id} label={f.label} accent="step5"
-                  selected={config.framework === f.id}
-                  onClick={() => updateConfig({ framework: f.id, framework_layout: '' })}
-                />
-              ))}
-            </div>
+            <select
+              className="border border-slate-300 rounded-lg px-3 py-2 w-full"
+              value={config.framework}
+              onChange={(e) => updateConfig({ framework: e.target.value, framework_layout: '' })}
+            >
+              <option value="">Select a framework...</option>
+              {FRAMEWORKS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
             {framework?.desc && <p className="text-sm text-slate-500">{framework.desc}</p>}
             <FrameworkPreview framework={framework} />
           </div>

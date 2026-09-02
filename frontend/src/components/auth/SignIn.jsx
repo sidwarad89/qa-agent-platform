@@ -15,7 +15,7 @@ export default function SignIn({ onSwitchToSignUp }) {
     setLoading(true)
     try {
       const data = await login({ username, password })
-      loginUser(data.username, data.access_token)
+      loginUser(data.username, data.access_token, data.is_admin)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Could not sign in. Check your username and password.')
     } finally {

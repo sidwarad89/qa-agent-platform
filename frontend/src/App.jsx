@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { AgentConfigProvider } from './context/AgentConfigContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider, useTheme } from './context/ThemeContext'
+import { trackVisit } from './api/client'
 
 import SignIn from './components/auth/SignIn'
 import SignUp from './components/auth/SignUp'
@@ -10,31 +12,39 @@ import ChatBotWidget from './components/ChatBotWidget'
 
 import MySpacePage from './pages/MySpacePage'
 import BuildPage from './pages/BuildPage'
+import AgentsPage from './pages/AgentsPage'
 import McpPage from './pages/McpPage'
 import AgenticProcessPage from './pages/AgenticProcessPage'
 import ProfilePage from './pages/ProfilePage'
+import ManagePage from './pages/ManagePage'
 
 function Console() {
   const { user, logoutUser } = useAuth()
+  const { theme } = useTheme()
   const [active, setActive] = useState('myspace')
   const [chatOpen, setChatOpen] = useState(false)
+
+  useEffect(() => { trackVisit('/console') }, [])
 
   const renderPage = () => {
     switch (active) {
       case 'build': return <BuildPage onNavigate={setActive} />
+      case 'agents': return <AgentsPage onNavigate={setActive} />
       case 'mcp': return <McpPage />
       case 'agentic': return <AgenticProcessPage />
       case 'profile': return <ProfilePage />
+      case 'manage': return user?.isAdmin ? <ManagePage /> : <MySpacePage onNavigate={setActive} />
       default: return <MySpacePage onNavigate={setActive} />
     }
   }
 
   return (
-    <div className="h-screen flex bg-slate-50">
+    <div className={`h-screen flex ${theme.className}`}>
       <Sidebar
         active={active}
         onNavigate={setActive}
         username={user?.username}
+        isAdmin={user?.isAdmin}
         onLogout={logoutUser}
         onToggleChat={() => setChatOpen((c) => !c)}
       />
@@ -69,7 +79,9 @@ function AuthGate() {
 export default function App() {
   return (
     <AuthProvider>
-      <AuthGate />
+      <ThemeProvider>
+        <AuthGate />
+      </ThemeProvider>
     </AuthProvider>
   )
 }

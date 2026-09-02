@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import models, pm_tools, output_tools, agent, auth, profile, mcp, agentic_process
+from app.routers import models, pm_tools, output_tools, agent, auth, profile, mcp, agentic_process, admin, chatbot
 from app.database import Base, engine
 from app.models import db_models  # noqa: F401 - imported so tables register on Base
 
@@ -31,6 +31,9 @@ app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(mcp.router)
 app.include_router(agentic_process.router)
+app.include_router(admin.router)
+app.include_router(admin.track_router)
+app.include_router(chatbot.router)
 
 
 @app.get("/api/health")

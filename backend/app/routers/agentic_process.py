@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from app.models.schemas import (
 )
 from app.services.auth_service import get_current_user
 from app.services.ai_providers import anthropic_client, openai_client, gemini_client, openai_compatible_client
+from app.services.mcp.jira_connector import JiraConnector
 
 router = APIRouter(prefix="/api/agentic", tags=["agentic-process"])
 
@@ -27,6 +28,38 @@ def _generate(provider: str, model_version: str, api_key: str, system: str, prom
     if provider in _OPENAI_COMPATIBLE_PROVIDERS:
         return openai_compatible_client.generate(api_key, model_version, system, prompt, provider=provider)
     raise HTTPException(status_code=400, detail=f"Unknown AI provider '{provider}'.")
+
+
+def _push_to_mcp_and_get_url(tool: str, credentials: dict, parent_item_id: str, step_name: str, output_text: str) -> Optional[str]:
+    """Pushes the step's output into the connected tool and returns a human-viewable
+    URL to verify it at. Jira is fully wired (creates a subtask, links to /browse/KEY).
+    Other tools aren't wired for this yet - returns None, output just stays inline."""
+    if tool != "jira":
+        return None
+
+    base_url = credentials.get("base_url", "").rstrip("/")
+    connector = JiraConnector(base_url=base_url, email=credentials.get("username", ""), api_token=credentials.get("api_key", ""))
+
+    result = connector.execute(
+        method="POST",
+        resource="issue",
+        item_id=None,
+        payload={
+            "fields": {
+                "project": {"key": credentials.get("project_key", "")},
+                "parent": {"key": parent_item_id} if parent_item_id else None,
+                "summary": step_name,
+                "description": {
+                    "type": "doc", "version": 1,
+                    "content": [{"type": "paragraph", "content": [{"type": "text", "text": output_text[:5000]}]}],
+                },
+                "issuetype": {"name": "Subtask"},
+            }
+        },
+    )
+    if result.get("success") and result.get("data", {}).get("key"):
+        return f"{base_url}/browse/{result['data']['key']}"
+    return None
 
 
 @router.post("/process", response_model=AgenticProcessOut)
@@ -100,8 +133,18 @@ def run_step(
 
     output_text = _generate(payload.ai_provider, payload.ai_model_version, payload.ai_api_key, system, prompt)
 
+    output_url = None
+    if payload.mcp_tool and payload.mcp_credentials:
+        try:
+            output_url = _push_to_mcp_and_get_url(
+                payload.mcp_tool, payload.mcp_credentials, payload.mcp_parent_item_id, payload.step_name, output_text,
+            )
+        except Exception:
+            output_url = None  # if the push fails, the text output still shows - never block the step
+
     if existing:
         existing.output = output_text
+        existing.output_url = output_url
         existing.status = "awaiting_review"
         step = existing
     else:
@@ -111,6 +154,7 @@ def run_step(
             step_name=payload.step_name,
             prompt=payload.prompt,
             output=output_text,
+            output_url=output_url,
             status="awaiting_review",
         )
         db.add(step)

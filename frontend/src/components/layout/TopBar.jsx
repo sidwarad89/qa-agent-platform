@@ -3,9 +3,11 @@ import React from 'react'
 const LABELS = {
   myspace: 'My Space',
   build: 'Build',
+  agents: 'Agents',
   mcp: 'MCP Tools',
   agentic: 'Agentic Process',
   profile: 'Profile',
+  manage: 'Manage',
 }
 
 export default function TopBar({ active }) {

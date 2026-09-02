@@ -11,6 +11,19 @@ class JiraConnector(BaseMCPConnector):
         self.base_url = base_url.rstrip("/")
         self.auth = (email, api_token)
 
+    def validate(self) -> tuple[bool, str]:
+        try:
+            with httpx.Client(auth=self.auth, timeout=20) as client:
+                resp = client.get(f"{self.base_url}/rest/api/3/myself")
+            if resp.status_code == 200:
+                name = resp.json().get("displayName", "your account")
+                return True, f"Connected as {name}."
+            if resp.status_code == 401:
+                return False, "Invalid email or API token."
+            return False, f"Unexpected response ({resp.status_code}): {resp.text[:200]}"
+        except Exception as exc:
+            return False, str(exc)
+
     def execute(self, method: str, resource: str, item_id: Optional[str], payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         method = method.upper()
 

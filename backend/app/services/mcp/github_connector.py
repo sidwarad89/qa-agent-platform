@@ -16,6 +16,23 @@ class GitHubConnector(BaseMCPConnector):
         }
         self.base_url = "https://api.github.com"
 
+    def validate(self) -> tuple[bool, str]:
+        try:
+            with httpx.Client(headers=self.headers, timeout=20) as client:
+                user_resp = client.get(f"{self.base_url}/user")
+                if user_resp.status_code == 401:
+                    return False, "Invalid personal access token."
+                if user_resp.status_code != 200:
+                    return False, f"Unexpected response ({user_resp.status_code})."
+                if self.repo:
+                    repo_resp = client.get(f"{self.base_url}/repos/{self.repo}")
+                    if repo_resp.status_code == 404:
+                        return False, f"Token is valid, but repo '{self.repo}' wasn't found or isn't accessible."
+                login = user_resp.json().get("login", "your account")
+            return True, f"Connected as {login}."
+        except Exception as exc:
+            return False, str(exc)
+
     def execute(self, method: str, resource: str, item_id: Optional[str], payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         method = method.upper()
         if resource == "issue":

@@ -16,7 +16,7 @@ export default function SignUp({ onSwitchToSignIn }) {
     setLoading(true)
     try {
       const data = await signup({ username, email, password })
-      loginUser(data.username, data.access_token)
+      loginUser(data.username, data.access_token, data.is_admin)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Could not create account.')
     } finally {

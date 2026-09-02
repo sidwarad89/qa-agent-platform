@@ -1,23 +1,42 @@
 import React, { useState } from 'react'
-import { FiShield, FiCheck } from 'react-icons/fi'
+import { FiShield, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi'
 import { MCP_TOOLS } from '../data/mcpTools'
+import { validateMcpTool } from '../api/client'
 
 export default function McpPage() {
   const [connecting, setConnecting] = useState(null) // tool id
   const [connected, setConnected] = useState({})     // { [toolId]: credentials }
   const [formValues, setFormValues] = useState({})
+  const [status, setStatus] = useState('idle')       // idle | validating | error
+  const [errorMessage, setErrorMessage] = useState('')
 
   const openConnect = (tool) => {
     setConnecting(tool.id)
     setFormValues({})
+    setStatus('idle')
+    setErrorMessage('')
   }
 
-  const confirmConnect = () => {
-    setConnected((c) => ({ ...c, [connecting]: formValues }))
-    setConnecting(null)
+  const confirmConnect = async () => {
+    setStatus('validating')
+    setErrorMessage('')
+    try {
+      const result = await validateMcpTool({ tool: connecting, credentials: formValues })
+      if (result.valid) {
+        setConnected((c) => ({ ...c, [connecting]: formValues }))
+        setConnecting(null)
+      } else {
+        setStatus('error')
+        setErrorMessage(result.message || 'Those credentials were rejected.')
+      }
+    } catch (err) {
+      setStatus('error')
+      setErrorMessage(err?.response?.data?.detail || 'Could not reach the backend to validate this.')
+    }
   }
 
   const activeTool = MCP_TOOLS.find((t) => t.id === connecting)
+  const allFieldsFilled = activeTool?.fields.every((f) => formValues[f.key]?.trim())
 
   return (
     <div className="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-6">
@@ -62,8 +81,8 @@ export default function McpPage() {
             <div className="bg-indigo-600 text-white p-5 flex items-center gap-3">
               <FiShield size={20} />
               <div>
-                <p className="font-semibold">OAuth Authorization</p>
-                <p className="text-xs text-indigo-100">{activeTool.label} is requesting access</p>
+                <p className="font-semibold">Connect {activeTool.label}</p>
+                <p className="text-xs text-indigo-100">Credentials are checked live before this counts as connected</p>
               </div>
             </div>
             <div className="p-5 flex flex-col gap-3">
@@ -89,12 +108,20 @@ export default function McpPage() {
                 ))}
               </div>
 
+              {status === 'error' && (
+                <p className="text-xs text-red-600 flex items-center gap-1.5"><FiAlertCircle /> {errorMessage}</p>
+              )}
+
               <div className="flex gap-3 mt-2">
                 <button onClick={() => setConnecting(null)} className="flex-1 border border-slate-300 rounded-lg py-2 text-sm font-medium text-slate-600">
                   Cancel
                 </button>
-                <button onClick={confirmConnect} className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium">
-                  Authorize & Connect
+                <button
+                  onClick={confirmConnect}
+                  disabled={!allFieldsFilled || status === 'validating'}
+                  className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  {status === 'validating' ? <><FiLoader className="animate-spin" /> Validating...</> : 'Authorize & Connect'}
                 </button>
               </div>
             </div>

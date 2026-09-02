@@ -3,11 +3,6 @@ import httpx
 
 from .base import BaseMCPConnector
 
-# Each tool's REST quirks, described declaratively. `{base_url}`, `{item_id}`,
-# and any custom placeholder (e.g. `{project}`) get filled in at call time.
-# This is the "first-draft, ready to extend" layer mentioned in the docs -
-# Jira and GitHub have hand-written connectors because they're the most
-# common; these five share this generic engine instead.
 TOOL_CONFIGS: Dict[str, Dict[str, Any]] = {
     "ado": {
         "base_path": "https://dev.azure.com/{organization}/{project}/_apis/wit/workitems",
@@ -15,6 +10,7 @@ TOOL_CONFIGS: Dict[str, Dict[str, Any]] = {
         "id_suffix": "/{item_id}?api-version=7.1",
         "create_suffix": "/$Task?api-version=7.1",
         "content_type": "application/json-patch+json",  # ADO PATCH bodies use JSON Patch format
+        "validate_path": "https://dev.azure.com/{organization}/_apis/projects?api-version=7.1",
     },
     "testrail": {
         "base_path": "{base_url}/index.php?/api/v2",
@@ -23,27 +19,19 @@ TOOL_CONFIGS: Dict[str, Dict[str, Any]] = {
         "create_path": "/add_case/{section_id}",
         "update_path": "/update_case/{item_id}",
         "delete_path": "/delete_case/{item_id}",
-    },
-    "xray": {
-        "base_path": "{base_url}/rest/raven/2.0/api/test",
-        "auth_type": "bearer",
-        "id_suffix": "/{item_id}",
-    },
-    "zephyr": {
-        "base_path": "{base_url}/rest/atm/1.0/testcase",
-        "auth_type": "bearer",
-        "id_suffix": "/{item_id}",
+        "validate_path": "{base_url}/index.php?/api/v2/get_projects",
     },
     "gitlab": {
         "base_path": "{base_url}/api/v4/projects/{project_encoded}/issues",
         "auth_type": "bearer",
         "id_suffix": "/{item_id}",
+        "validate_path": "{base_url}/api/v4/user",
     },
 }
 
 
 class GenericMCPConnector(BaseMCPConnector):
-    """Config-driven connector for tools that don't have a hand-written client yet."""
+    """Config-driven connector for tools that share a simple REST + validate shape."""
 
     def __init__(self, tool: str, base_url: str = "", api_token: str = "", username: str = "", extra: Optional[Dict[str, Any]] = None):
         if tool not in TOOL_CONFIGS:
@@ -68,12 +56,28 @@ class GenericMCPConnector(BaseMCPConnector):
             return {"Authorization": f"Bearer {self.api_token}", "Content-Type": "application/json"}
         return {"Content-Type": self.config.get("content_type", "application/json")}
 
-    def _resolve(self, template: str, item_id: Optional[str]) -> str:
+    def _resolve(self, template: str, item_id: Optional[str] = None) -> str:
         return template.format(
             base_url=self.base_url,
             item_id=item_id or "",
             **self.extra,
         )
+
+    def validate(self) -> tuple[bool, str]:
+        validate_path = self.config.get("validate_path")
+        if not validate_path:
+            return False, "No validation check available for this tool yet."
+        try:
+            url = self._resolve(validate_path)
+            with httpx.Client(auth=self._auth(), headers=self._headers(), timeout=20) as client:
+                resp = client.get(url)
+            if resp.status_code == 200:
+                return True, "Credentials look valid."
+            if resp.status_code in (401, 403):
+                return False, "Invalid credentials or insufficient permissions."
+            return False, f"Unexpected response ({resp.status_code}): {resp.text[:200]}"
+        except Exception as exc:
+            return False, str(exc)
 
     def execute(self, method: str, resource: str, item_id: Optional[str], payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         method = method.upper()

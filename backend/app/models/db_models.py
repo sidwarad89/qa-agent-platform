@@ -12,7 +12,9 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_login = Column(DateTime(timezone=True), nullable=True)
 
     agents = relationship("AgentRecord", back_populates="owner", cascade="all, delete-orphan")
     processes = relationship("AgenticProcess", back_populates="owner", cascade="all, delete-orphan")
@@ -56,6 +58,7 @@ class AgenticStep(Base):
     step_name = Column(String, nullable=False)
     prompt = Column(Text, nullable=True)
     output = Column(Text, nullable=True)
+    output_url = Column(String, nullable=True)  # e.g. the Jira subtask URL to verify against
     status = Column(String, default="pending")  # pending | awaiting_review | approved
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -82,4 +85,14 @@ class McpConnection(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     tool = Column(String, nullable=False)
     connected = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PageVisit(Base):
+    """One row per app load - the simplest possible 'how many people are visiting' signal."""
+    __tablename__ = "page_visits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # null = not logged in yet
+    path = Column(String, default="/")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -16,8 +16,16 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-secret-change-me-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # tokens last 1 week
 
+# Comma-separated usernames that should automatically get admin rights.
+# Set this on Render: ADMIN_USERNAMES=sidwarad89,anotheradmin
+ADMIN_USERNAMES = {u.strip() for u in os.getenv("ADMIN_USERNAMES", "").split(",") if u.strip()}
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+
+def is_admin_username(username: str) -> bool:
+    return username in ADMIN_USERNAMES
 
 
 def hash_password(password: str) -> str:
@@ -53,3 +61,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if user is None:
         raise credentials_exception
     return user
+
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return current_user

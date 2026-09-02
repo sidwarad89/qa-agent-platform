@@ -1,12 +1,15 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.db_models import User
+from app.models.db_models import User, PageVisit
 from app.models.schemas import SignupRequest, LoginRequest, TokenResponse, UserOut
 from app.services.auth_service import (
-    hash_password, verify_password, create_access_token, get_current_user,
+    hash_password, verify_password, create_access_token, get_current_user, is_admin_username,
 )
+from app.services.email_service import send_welcome_email
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -25,13 +28,20 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
+        is_admin=is_admin_username(payload.username),
+        last_login=datetime.utcnow(),
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
+    try:
+        send_welcome_email(user.email, user.username)
+    except Exception:
+        pass  # never block signup on email failures
+
     token = create_access_token({"sub": str(user.id)})
-    return TokenResponse(access_token=token, username=user.username)
+    return TokenResponse(access_token=token, username=user.username, is_admin=user.is_admin)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -40,8 +50,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password.")
 
+    # Bootstrap admin rights if this username is listed in ADMIN_USERNAMES.
+    # Synced BOTH ways on every login so removing a name from ADMIN_USERNAMES
+    # revokes access immediately - is_admin can never be set any other way.
+    user.is_admin = is_admin_username(user.username)
+    user.last_login = datetime.utcnow()
+    db.commit()
+
     token = create_access_token({"sub": str(user.id)})
-    return TokenResponse(access_token=token, username=user.username)
+    return TokenResponse(access_token=token, username=user.username, is_admin=user.is_admin)
 
 
 @router.get("/me", response_model=UserOut)

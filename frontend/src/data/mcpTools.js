@@ -67,23 +67,41 @@ export const MCP_TOOLS = [
     id: 'xray',
     label: 'Xray',
     color: '#DE350B',
-    description: 'Manage test entities inside Jira via Xray.',
+    // Xray Cloud does NOT use your Jira URL or basic auth - it authenticates
+    // separately via Client ID/Secret against xray.cloud.getxray.app, then
+    // uses the returned token as a Bearer token for everything else.
+    description: 'Manage test entities via Xray Cloud (separate auth from Jira).',
     scopes: ['Read and write tests', 'Access test execution data'],
     fields: [
-      { key: 'base_url', label: 'Xray/Jira Base URL', placeholder: 'https://yourorg.atlassian.net' },
-      { key: 'username', label: 'Client ID', placeholder: '' },
+      { key: 'username', label: 'Client ID', placeholder: 'From Jira → Apps → Xray → API Keys' },
       { key: 'api_key', label: 'Client Secret', mask: true },
+      { key: 'project_key', label: 'Jira Project Key', placeholder: 'e.g. QA' },
     ],
   },
   {
     id: 'zephyr',
     label: 'Zephyr Scale',
     color: '#00B8D9',
-    description: 'Manage test cases inside Jira via Zephyr Scale.',
+    // Zephyr Scale Cloud has its own fixed API host (api.zephyrscale.smartbear.com) -
+    // it does not live under your Jira domain, and only needs one bearer token.
+    description: 'Manage test cases via Zephyr Scale Cloud (fixed API host, not your Jira URL).',
     scopes: ['Read and write test cases'],
     fields: [
-      { key: 'base_url', label: 'Zephyr/Jira Base URL', placeholder: 'https://yourorg.atlassian.net' },
-      { key: 'api_key', label: 'API Access Token', mask: true },
+      { key: 'api_key', label: 'API Access Token', mask: true, placeholder: 'Jira profile → Zephyr Scale → API Access Tokens' },
+      { key: 'project_key', label: 'Jira Project Key', placeholder: 'e.g. QA' },
+    ],
+  },
+  {
+    id: 'aws',
+    label: 'AWS CodeCommit',
+    color: '#FF9900',
+    description: 'Read, create, update, and delete files in an AWS CodeCommit repository.',
+    scopes: ['Read and write repository files'],
+    fields: [
+      { key: 'username', label: 'AWS Access Key ID', placeholder: 'AKIA...' },
+      { key: 'api_key', label: 'AWS Secret Access Key', mask: true },
+      { key: 'region', label: 'AWS Region', placeholder: 'e.g. us-east-1' },
+      { key: 'repo', label: 'Repository Name', placeholder: 'e.g. qa-automation-scripts' },
     ],
   },
 ]

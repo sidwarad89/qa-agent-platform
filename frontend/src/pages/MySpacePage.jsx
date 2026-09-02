@@ -2,6 +2,14 @@ import React, { useEffect, useState } from 'react'
 import { FiTool, FiGrid, FiCheckCircle } from 'react-icons/fi'
 import { fetchProfileStats } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { AgentIllustration, AgenticProcessIllustration } from '../components/illustrations/Illustrations'
+
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good Morning'
+  if (hour < 17) return 'Good Afternoon'
+  return 'Good Evening'
+}
 
 export default function MySpacePage({ onNavigate }) {
   const { user } = useAuth()
@@ -14,7 +22,7 @@ export default function MySpacePage({ onNavigate }) {
   return (
     <div className="max-w-5xl mx-auto py-10 px-6 flex flex-col gap-8">
       <div>
-        <h1 className="text-3xl font-bold text-slate-800">Welcome back, {user?.username || 'there'}.</h1>
+        <h1 className="text-3xl font-bold text-slate-800">{getGreeting()}, {user?.username || 'there'}.</h1>
         <p className="text-slate-500 mt-1">Here's a quick look at what you've built so far.</p>
       </div>
 
@@ -27,15 +35,17 @@ export default function MySpacePage({ onNavigate }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <button
           onClick={() => onNavigate('build')}
-          className="text-left bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow"
+          className="text-left bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow flex flex-col gap-2"
         >
+          <AgentIllustration className="w-full h-24" />
           <h3 className="font-semibold text-slate-800 mb-1">Build a new Agent</h3>
           <p className="text-sm text-slate-500">Pick an AI engine, language, and framework, then generate it.</p>
         </button>
         <button
           onClick={() => onNavigate('agentic')}
-          className="text-left bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow"
+          className="text-left bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-md transition-shadow flex flex-col gap-2"
         >
+          <AgenticProcessIllustration className="w-full h-24" />
           <h3 className="font-semibold text-slate-800 mb-1">Start an Agentic Process</h3>
           <p className="text-sm text-slate-500">Chain multiple agents together with human-in-the-loop review.</p>
         </button>

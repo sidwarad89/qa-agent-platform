@@ -109,6 +109,11 @@ export async function executeMcpAction(payload) {
   return data
 }
 
+export async function validateMcpTool(payload) {
+  const { data } = await api.post('/api/mcp/validate', payload)
+  return data
+}
+
 export async function inferMcpMethod(instruction) {
   const { data } = await api.post(`/api/mcp/infer-method`, null, { params: { instruction } })
   return data
@@ -133,5 +138,42 @@ export async function runAgenticStep(processId, payload) {
 
 export async function approveAgenticStep(processId, stepIndex) {
   const { data } = await api.post(`/api/agentic/process/${processId}/steps/${stepIndex}/approve`)
+  return data
+}
+
+// ---- Admin / analytics -----------------------------------------------------
+
+export async function fetchAdminUsers() {
+  const { data } = await api.get('/api/admin/users')
+  return data
+}
+
+export async function fetchAdminStats() {
+  const { data } = await api.get('/api/admin/stats')
+  return data
+}
+
+export async function trackVisit(path = '/') {
+  try {
+    await api.post('/api/track/visit', null, { params: { path } })
+  } catch {
+    // tracking failures should never disrupt the app
+  }
+}
+
+export async function fetchAdminTimeline() {
+  const { data } = await api.get('/api/admin/timeline')
+  return data
+}
+
+export async function fetchRecentLogins() {
+  const { data } = await api.get('/api/admin/recent-logins')
+  return data
+}
+
+// ---- Chatbot ----------------------------------------------------------------
+
+export async function sendChatbotMessage(payload) {
+  const { data } = await api.post('/api/chatbot/message', payload)
   return data
 }

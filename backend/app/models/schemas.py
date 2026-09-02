@@ -75,12 +75,16 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     username: str
+    is_admin: bool = False
 
 
 class UserOut(BaseModel):
     id: int
     username: str
     email: str
+    is_admin: bool = False
+    created_at: datetime
+    last_login: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -140,6 +144,16 @@ class McpExecuteResponse(BaseModel):
     detail: Optional[str] = None
 
 
+class McpValidateRequest(BaseModel):
+    tool: str
+    credentials: Dict[str, Any]
+
+
+class McpValidateResponse(BaseModel):
+    valid: bool
+    message: str
+
+
 # --- Agentic Process (chained agents + human-in-the-loop) ----------------
 
 class AgenticProcessCreate(BaseModel):
@@ -152,6 +166,7 @@ class AgenticStepOut(BaseModel):
     step_name: str
     prompt: Optional[str] = None
     output: Optional[str] = None
+    output_url: Optional[str] = None
     status: str
     created_at: datetime
 
@@ -174,4 +189,45 @@ class AgenticStepRunRequest(BaseModel):
     ai_model_version: str
     ai_api_key: str
     previous_output: Optional[str] = None
-    feedback: Optional[str] = None   # comment or extracted doc text triggering a retry
+    feedback: Optional[str] = None   # comment or extracted doc text triggering a re-execute
+    # Optional: push this step's output straight into an MCP tool (e.g. as a Jira subtask)
+    mcp_tool: Optional[str] = None
+    mcp_credentials: Optional[Dict[str, Any]] = None
+    mcp_parent_item_id: Optional[str] = None
+
+
+# --- Admin / analytics -----------------------------------------------------
+
+class AdminUserOut(BaseModel):
+    id: int
+    username: str
+    email: str
+    is_admin: bool
+    created_at: datetime
+    last_login: Optional[datetime] = None
+    agents_count: int
+    processes_count: int
+
+
+class AdminStats(BaseModel):
+    total_users: int
+    total_visits: int
+    visits_today: int
+    signups_today: int
+    new_users_7d: int
+
+
+class TimeBucket(BaseModel):
+    label: str
+    count: int
+
+
+class AdminTimeline(BaseModel):
+    buckets: List[TimeBucket]       # last 1h / 24h / 7d / 30d / 3mo / 6mo / 1y
+    yearly: List[TimeBucket]        # per-year signups for the last 5 years
+
+
+class RecentLogin(BaseModel):
+    username: str
+    last_login: Optional[datetime] = None
+    is_admin: bool
