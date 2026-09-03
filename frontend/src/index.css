@@ -12,3 +12,12 @@ html {
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
 code, pre { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+@keyframes robotBlink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.12); }
+}
+.robot-eye {
+  animation: robotBlink 4.2s ease-in-out infinite;
+  transform-origin: center;
+}

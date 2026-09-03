@@ -10,6 +10,7 @@ import SignUp from './components/auth/SignUp'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
 import ChatBotWidget from './components/ChatBotWidget'
+import AssistantToggle from './components/AssistantToggle'
 import OnboardingGuide from './components/OnboardingGuide'
 
 import MySpacePage from './pages/MySpacePage'
@@ -65,6 +66,7 @@ function Console() {
           </Routes>
         </main>
       </div>
+      <AssistantToggle onClick={() => setChatOpen((c) => !c)} />
       <ChatBotWidget open={chatOpen} onClose={() => setChatOpen(false)} />
       <OnboardingGuide open={onboardingOpen} onClose={closeOnboarding} />
     </div>
