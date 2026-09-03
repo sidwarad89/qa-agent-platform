@@ -1,19 +1,37 @@
-import React, { useState } from 'react'
-import { FiShield, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi'
+import React, { useEffect, useState } from 'react'
+import { FiShield, FiCheck, FiLoader, FiAlertCircle, FiX } from 'react-icons/fi'
 import { MCP_TOOLS } from '../data/mcpTools'
 import { validateMcpTool } from '../api/client'
 import ApiKeyHelp from '../components/shared/ApiKeyHelp'
 
+const STORAGE_KEY = 'qa_mcp_connections'
+
+function loadConnections() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    return saved ? JSON.parse(saved) : {}
+  } catch {
+    return {}
+  }
+}
+
 export default function McpPage() {
   const [connecting, setConnecting] = useState(null) // tool id
-  const [connected, setConnected] = useState({})     // { [toolId]: credentials }
+  const [connected, setConnected] = useState(loadConnections) // { [toolId]: credentials }
   const [formValues, setFormValues] = useState({})
   const [status, setStatus] = useState('idle')       // idle | validating | error
   const [errorMessage, setErrorMessage] = useState('')
 
+  // Persist every time the connected-tools list changes, so a refresh (or
+  // closing the tab) never silently disconnects anything - only an explicit
+  // Disconnect click does.
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(connected))
+  }, [connected])
+
   const openConnect = (tool) => {
     setConnecting(tool.id)
-    setFormValues({})
+    setFormValues(connected[tool.id] || {})
     setStatus('idle')
     setErrorMessage('')
   }
@@ -36,6 +54,14 @@ export default function McpPage() {
     }
   }
 
+  const disconnect = (toolId) => {
+    setConnected((c) => {
+      const next = { ...c }
+      delete next[toolId]
+      return next
+    })
+  }
+
   const activeTool = MCP_TOOLS.find((t) => t.id === connecting)
   const allFieldsFilled = activeTool?.fields.every((f) => formValues[f.key]?.trim())
 
@@ -46,34 +72,55 @@ export default function McpPage() {
         <p className="text-slate-500 text-sm mt-1">
           Connect your project-management and test-management tools once. Any agent or agentic process can then read,
           create, update, or delete data in them — just describe the action in plain English (e.g. "delete test case QA-42").
+          Once connected, a tool stays connected until you disconnect it yourself.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {MCP_TOOLS.map((tool) => (
-          <div key={tool.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style={{ backgroundColor: tool.color }}>
-                {tool.label[0]}
+        {MCP_TOOLS.map((tool) => {
+          const isConnected = !!connected[tool.id]
+          return (
+            <div key={tool.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style={{ backgroundColor: tool.color }}>
+                  {tool.label[0]}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800">{tool.label}</h3>
+                  {isConnected && (
+                    <span className="text-[11px] text-emerald-600 flex items-center gap-1"><FiCheck /> Connected</span>
+                  )}
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-slate-800">{tool.label}</h3>
-                {connected[tool.id] && (
-                  <span className="text-[11px] text-emerald-600 flex items-center gap-1"><FiCheck /> Connected</span>
-                )}
-              </div>
+              <p className="text-sm text-slate-500 flex-1">{tool.description}</p>
+
+              {isConnected ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openConnect(tool)}
+                    className="flex-1 text-sm font-medium rounded-lg py-2 bg-slate-100 text-slate-600"
+                  >
+                    Reconnect
+                  </button>
+                  <button
+                    onClick={() => disconnect(tool.id)}
+                    title="Disconnect"
+                    className="px-3 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200"
+                  >
+                    <FiX size={16} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => openConnect(tool)}
+                  className="text-sm font-medium rounded-lg py-2 bg-indigo-600 text-white"
+                >
+                  Connect
+                </button>
+              )}
             </div>
-            <p className="text-sm text-slate-500 flex-1">{tool.description}</p>
-            <button
-              onClick={() => openConnect(tool)}
-              className={`text-sm font-medium rounded-lg py-2 ${
-                connected[tool.id] ? 'bg-slate-100 text-slate-600' : 'bg-indigo-600 text-white'
-              }`}
-            >
-              {connected[tool.id] ? 'Reconnect' : 'Connect'}
-            </button>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {activeTool && (
