@@ -5,6 +5,8 @@ import {
 } from 'react-icons/fi'
 import { fetchMyAgents, createAgenticProcess, runAgenticStep, approveAgenticStep } from '../api/client'
 import { getProvider } from '../data/aiModels'
+import { getMcpTool } from '../data/mcpTools'
+import { useMcpConnections } from '../context/McpConnectionsContext'
 import { GoldenChainIllustration } from '../components/illustrations/Illustrations'
 
 const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json']
@@ -51,11 +53,13 @@ function readFileAsText(file) {
 }
 
 export default function AgenticProcessPage() {
+  const { connections } = useMcpConnections()
+  const connectedToolIds = Object.keys(connections)
   const [myAgents, setMyAgents] = useState([])
   const [phase, setPhase] = useState('setup') // setup | running
   const [processName, setProcessName] = useState('')
 
-  // chain: [{ agentId, hilEnabled, mcpEnabled, mcp: {...} }]
+  // chain: [{ agentId, hilEnabled, mcpTool: 'none'|toolId, targetId }]
   const [chain, setChain] = useState([])
   const [apiKeys, setApiKeys] = useState({}) // { [provider]: key }
 
@@ -69,12 +73,10 @@ export default function AgenticProcessPage() {
   const getAgent = (id) => myAgents.find((a) => a.id === Number(id))
 
   const addChainItem = (agentId) => setChain((c) => [...c, {
-    agentId: agentId ?? (myAgents[0]?.id || ''), hilEnabled: true, mcpEnabled: false,
-    mcp: { base_url: '', username: '', api_key: '', project_key: '', parent_item_id: '' },
+    agentId: agentId ?? (myAgents[0]?.id || ''), hilEnabled: true, mcpTool: 'none', targetId: '',
   }])
   const removeChainItem = (i) => setChain((c) => c.filter((_, idx) => idx !== i))
   const updateChainItem = (i, key, value) => setChain((c) => c.map((item, idx) => (idx === i ? { ...item, [key]: value } : item)))
-  const updateChainMcp = (i, key, value) => setChain((c) => c.map((item, idx) => (idx === i ? { ...item, mcp: { ...item.mcp, [key]: value } } : item)))
 
   const usedProviders = [...new Set(chain.map((c) => getAgent(c.agentId)?.ai_provider).filter(Boolean))]
 
@@ -101,9 +103,9 @@ export default function AgenticProcessPage() {
         ai_api_key: apiKeys[agent.ai_provider] || '',
         previous_output: previousOutput,
         feedback,
-        mcp_tool: item.mcpEnabled ? 'jira' : null,
-        mcp_credentials: item.mcpEnabled ? item.mcp : null,
-        mcp_parent_item_id: item.mcpEnabled ? item.mcp.parent_item_id : null,
+        mcp_tool: item.mcpTool !== 'none' ? item.mcpTool : null,
+        mcp_credentials: item.mcpTool !== 'none' ? connections[item.mcpTool] : null,
+        mcp_parent_item_id: item.mcpTool !== 'none' ? item.targetId : null,
       })
       setRuntimeSteps((rs) => {
         const copy = [...rs]
@@ -286,17 +288,28 @@ export default function AgenticProcessPage() {
                       )}
 
                       <label className="flex items-center gap-2 text-xs text-slate-500 pl-9">
-                        <input type="checkbox" checked={item.mcpEnabled} onChange={(e) => updateChainItem(i, 'mcpEnabled', e.target.checked)} />
-                        <FiLink size={12} /> Also push this agent's output into Jira as a subtask
+                        <FiLink size={12} /> Also push this agent's output to:
                       </label>
-                      {item.mcpEnabled && (
-                        <div className="grid grid-cols-2 gap-2 ml-9 bg-white rounded-lg p-3 border border-slate-200">
-                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs col-span-2" placeholder="Jira Base URL" value={item.mcp.base_url} onChange={(e) => updateChainMcp(i, 'base_url', e.target.value)} />
-                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Email" value={item.mcp.username} onChange={(e) => updateChainMcp(i, 'username', e.target.value)} />
-                          <input type="password" className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="API Token" value={item.mcp.api_key} onChange={(e) => updateChainMcp(i, 'api_key', e.target.value)} />
-                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Project Key" value={item.mcp.project_key} onChange={(e) => updateChainMcp(i, 'project_key', e.target.value)} />
-                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Parent Issue ID" value={item.mcp.parent_item_id} onChange={(e) => updateChainMcp(i, 'parent_item_id', e.target.value)} />
-                        </div>
+                      <select
+                        className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs ml-9 w-fit min-w-[160px]"
+                        value={item.mcpTool}
+                        onChange={(e) => updateChainItem(i, 'mcpTool', e.target.value)}
+                      >
+                        <option value="none">Don't push anywhere</option>
+                        {connectedToolIds.map((toolId) => (
+                          <option key={toolId} value={toolId}>{getMcpTool(toolId)?.label || toolId}</option>
+                        ))}
+                      </select>
+                      {connectedToolIds.length === 0 && (
+                        <p className="text-xs text-slate-400 pl-9">No tools connected yet — connect one under MCP Tools first.</p>
+                      )}
+                      {item.mcpTool !== 'none' && (
+                        <input
+                          className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs ml-9"
+                          placeholder="Target ID (optional) — e.g. parent issue key, section ID"
+                          value={item.targetId}
+                          onChange={(e) => updateChainItem(i, 'targetId', e.target.value)}
+                        />
                       )}
                     </div>
                   </React.Fragment>

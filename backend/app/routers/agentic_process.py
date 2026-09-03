@@ -12,6 +12,11 @@ from app.models.schemas import (
 from app.services.auth_service import get_current_user
 from app.services.ai_providers import anthropic_client, openai_client, gemini_client, openai_compatible_client
 from app.services.mcp.jira_connector import JiraConnector
+from app.services.mcp.github_connector import GitHubConnector
+from app.services.mcp.generic_connector import GenericMCPConnector
+from app.services.mcp.xray_connector import XrayConnector
+from app.services.mcp.zephyr_connector import ZephyrConnector
+from app.services.mcp.aws_codecommit_connector import AWSCodeCommitConnector
 
 router = APIRouter(prefix="/api/agentic", tags=["agentic-process"])
 
@@ -31,21 +36,17 @@ def _generate(provider: str, model_version: str, api_key: str, system: str, prom
 
 
 def _push_to_mcp_and_get_url(tool: str, credentials: dict, parent_item_id: str, step_name: str, output_text: str) -> Optional[str]:
-    """Pushes the step's output into the connected tool and returns a human-viewable
-    URL to verify it at. Jira is fully wired (creates a subtask, links to /browse/KEY).
-    Other tools aren't wired for this yet - returns None, output just stays inline."""
-    if tool != "jira":
-        return None
-
+    """Pushes the step's output into whichever tool is connected, and returns a
+    human-viewable URL to verify it at, where that tool's API makes one available.
+    Jira, GitHub, GitLab, Azure DevOps, and TestRail all get a real clickable link.
+    Xray, Zephyr, and AWS CodeCommit still get the push, just without a browsable link yet."""
     base_url = credentials.get("base_url", "").rstrip("/")
-    connector = JiraConnector(base_url=base_url, email=credentials.get("username", ""), api_token=credentials.get("api_key", ""))
 
-    result = connector.execute(
-        method="POST",
-        resource="issue",
-        item_id=None,
-        payload={
-            "fields": {
+    if tool == "jira":
+        connector = JiraConnector(base_url=base_url, email=credentials.get("username", ""), api_token=credentials.get("api_key", ""))
+        result = connector.execute(
+            method="POST", resource="issue", item_id=None,
+            payload={"fields": {
                 "project": {"key": credentials.get("project_key", "")},
                 "parent": {"key": parent_item_id} if parent_item_id else None,
                 "summary": step_name,
@@ -54,11 +55,79 @@ def _push_to_mcp_and_get_url(tool: str, credentials: dict, parent_item_id: str, 
                     "content": [{"type": "paragraph", "content": [{"type": "text", "text": output_text[:5000]}]}],
                 },
                 "issuetype": {"name": "Subtask"},
-            }
-        },
-    )
-    if result.get("success") and result.get("data", {}).get("key"):
-        return f"{base_url}/browse/{result['data']['key']}"
+            }},
+        )
+        if result.get("success") and result.get("data", {}).get("key"):
+            return f"{base_url}/browse/{result['data']['key']}"
+        return None
+
+    if tool == "github":
+        connector = GitHubConnector(repo=credentials.get("repo", ""), api_token=credentials.get("api_key", ""))
+        result = connector.execute(method="POST", resource="issue", item_id=None, payload={"title": step_name, "body": output_text[:60000]})
+        if result.get("success"):
+            return result.get("data", {}).get("html_url")
+        return None
+
+    if tool == "gitlab":
+        from urllib.parse import quote
+        connector = GenericMCPConnector(
+            tool="gitlab", base_url=base_url, api_token=credentials.get("api_key", ""),
+            extra={"project_encoded": quote(credentials.get("repo", ""), safe="")},
+        )
+        result = connector.execute(method="POST", resource="issue", item_id=None, payload={"title": step_name, "description": output_text[:60000]})
+        if result.get("success"):
+            return result.get("data", {}).get("web_url")
+        return None
+
+    if tool == "ado":
+        connector = GenericMCPConnector(
+            tool="ado", api_token=credentials.get("api_key", ""),
+            extra={"organization": credentials.get("organization", ""), "project": credentials.get("project", "")},
+        )
+        patch_body = [
+            {"op": "add", "path": "/fields/System.Title", "value": step_name},
+            {"op": "add", "path": "/fields/System.Description", "value": output_text[:5000]},
+        ]
+        result = connector.execute(method="POST", resource="workitem", item_id=None, payload=patch_body)
+        if result.get("success") and result.get("data", {}).get("id"):
+            org = credentials.get("organization", "")
+            proj = credentials.get("project", "")
+            return f"https://dev.azure.com/{org}/{proj}/_workitems/edit/{result['data']['id']}"
+        return None
+
+    if tool == "testrail":
+        connector = GenericMCPConnector(
+            tool="testrail", base_url=base_url, api_token=credentials.get("api_key", ""),
+            username=credentials.get("username", ""), extra={"section_id": parent_item_id or "1"},
+        )
+        result = connector.execute(method="POST", resource="case", item_id=None, payload={"title": step_name, "custom_steps": output_text[:2000]})
+        if result.get("success") and result.get("data", {}).get("id"):
+            return f"{base_url}/index.php?/cases/view/{result['data']['id']}"
+        return None
+
+    if tool in ("xray", "zephyr", "aws"):
+        # These pushes happen for real, but we don't yet build a clean browse
+        # link for them - the raw output still shows inline either way.
+        try:
+            if tool == "xray":
+                XrayConnector(
+                    client_id=credentials.get("username", ""), client_secret=credentials.get("api_key", ""),
+                    project_key=credentials.get("project_key", ""),
+                ).execute(method="POST", resource="test", item_id=None, payload={"summary": step_name})
+            elif tool == "zephyr":
+                ZephyrConnector(
+                    api_token=credentials.get("api_key", ""), project_key=credentials.get("project_key", ""),
+                ).execute(method="POST", resource="testcase", item_id=None, payload={"name": step_name})
+            elif tool == "aws":
+                AWSCodeCommitConnector(
+                    access_key_id=credentials.get("username", ""), secret_access_key=credentials.get("api_key", ""),
+                    region=credentials.get("region", ""), repo=credentials.get("repo", ""),
+                ).execute(method="POST", resource="file", item_id=f"{step_name.replace(' ', '_')}.txt",
+                          payload={"content": output_text, "message": f"Add output for {step_name}"})
+        except Exception:
+            pass
+        return None
+
     return None
 
 

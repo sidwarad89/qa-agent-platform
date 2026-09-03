@@ -1,37 +1,20 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { FiShield, FiCheck, FiLoader, FiAlertCircle, FiX } from 'react-icons/fi'
 import { MCP_TOOLS } from '../data/mcpTools'
 import { validateMcpTool } from '../api/client'
 import ApiKeyHelp from '../components/shared/ApiKeyHelp'
-import { scopedKey } from '../utils/scopedStorage'
-
-function loadConnections() {
-  try {
-    const saved = localStorage.getItem(scopedKey('qa_mcp_connections'))
-    return saved ? JSON.parse(saved) : {}
-  } catch {
-    return {}
-  }
-}
+import { useMcpConnections } from '../context/McpConnectionsContext'
 
 export default function McpPage() {
-  const [connecting, setConnecting] = useState(null) // tool id
-  const [connected, setConnected] = useState(loadConnections) // { [toolId]: credentials }
+  const { connections, setConnection, removeConnection } = useMcpConnections()
+  const [connecting, setConnecting] = useState(null)
   const [formValues, setFormValues] = useState({})
-  const [status, setStatus] = useState('idle')       // idle | validating | error
+  const [status, setStatus] = useState('idle')
   const [errorMessage, setErrorMessage] = useState('')
-
-  // Persist every time the connected-tools list changes, so a refresh (or
-  // closing the tab) never silently disconnects anything - only an explicit
-  // Disconnect click does. Scoped per-user so this never leaks to the next
-  // person who logs in on the same browser.
-  useEffect(() => {
-    localStorage.setItem(scopedKey('qa_mcp_connections'), JSON.stringify(connected))
-  }, [connected])
 
   const openConnect = (tool) => {
     setConnecting(tool.id)
-    setFormValues(connected[tool.id] || {})
+    setFormValues(connections[tool.id] || {})
     setStatus('idle')
     setErrorMessage('')
   }
@@ -42,7 +25,7 @@ export default function McpPage() {
     try {
       const result = await validateMcpTool({ tool: connecting, credentials: formValues })
       if (result.valid) {
-        setConnected((c) => ({ ...c, [connecting]: formValues }))
+        setConnection(connecting, formValues)
         setConnecting(null)
       } else {
         setStatus('error')
@@ -52,14 +35,6 @@ export default function McpPage() {
       setStatus('error')
       setErrorMessage(err?.response?.data?.detail || 'Could not reach the backend to validate this.')
     }
-  }
-
-  const disconnect = (toolId) => {
-    setConnected((c) => {
-      const next = { ...c }
-      delete next[toolId]
-      return next
-    })
   }
 
   const activeTool = MCP_TOOLS.find((t) => t.id === connecting)
@@ -72,13 +47,13 @@ export default function McpPage() {
         <p className="text-slate-500 text-sm mt-1">
           Connect your project-management and test-management tools once. Any agent or agentic process can then read,
           create, update, or delete data in them — just describe the action in plain English (e.g. "delete test case QA-42").
-          Once connected, a tool stays connected until you disconnect it yourself.
+          Once connected, a tool stays connected everywhere on this platform until you disconnect it yourself.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {MCP_TOOLS.map((tool) => {
-          const isConnected = !!connected[tool.id]
+          const isConnected = !!connections[tool.id]
           return (
             <div key={tool.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
               <div className="flex items-center gap-3">
@@ -103,7 +78,7 @@ export default function McpPage() {
                     Reconnect
                   </button>
                   <button
-                    onClick={() => disconnect(tool.id)}
+                    onClick={() => removeConnection(tool.id)}
                     title="Disconnect"
                     className="px-3 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200"
                   >

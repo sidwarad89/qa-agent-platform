@@ -8,7 +8,7 @@ TOOL_CONFIGS: Dict[str, Dict[str, Any]] = {
         "base_path": "https://dev.azure.com/{organization}/{project}/_apis/wit/workitems",
         "auth_type": "basic_pat",       # PAT goes in the password field, blank username
         "id_suffix": "/{item_id}?api-version=7.1",
-        "create_suffix": "/$Task?api-version=7.1",
+        "create_path": "/$Task?api-version=7.1",
         "content_type": "application/json-patch+json",  # ADO PATCH bodies use JSON Patch format
         "validate_path": "https://dev.azure.com/{organization}/_apis/projects?api-version=7.1",
     },

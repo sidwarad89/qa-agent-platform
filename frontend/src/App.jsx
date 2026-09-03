@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { AgentConfigProvider } from './context/AgentConfigContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
+import { McpConnectionsProvider } from './context/McpConnectionsContext'
 import { trackVisit } from './api/client'
 
 import SignIn from './components/auth/SignIn'
@@ -92,7 +93,9 @@ function AuthGate() {
 
   return (
     <AgentConfigProvider>
-      <Console />
+      <McpConnectionsProvider>
+        <Console />
+      </McpConnectionsProvider>
     </AgentConfigProvider>
   )
 }
