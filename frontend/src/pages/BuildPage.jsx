@@ -160,6 +160,13 @@ export default function BuildPage({ onNavigate }) {
                     ))}
                   </div>
                 )}
+
+                {selectedVersion?.free && (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Free-tier models usually cap output length and speed more tightly than paid ones. If a generation
+                    looks cut off, incomplete, or lower quality than expected, try a paid version of this model instead.
+                  </p>
+                )}
               </div>
             )}
 
