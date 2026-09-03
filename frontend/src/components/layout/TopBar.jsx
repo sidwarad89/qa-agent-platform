@@ -8,6 +8,7 @@ const LABELS = {
   agentic: 'Agentic Process',
   profile: 'Profile',
   manage: 'Manage',
+  analytics: 'Analytics',
 }
 
 export default function TopBar({ active }) {

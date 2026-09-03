@@ -132,6 +132,11 @@ export async function fetchFeedback() {
   return data
 }
 
+export async function fetchUsageAnalytics() {
+  const { data } = await api.get('/api/profile/analytics')
+  return data
+}
+
 // ---- MCP tools --------------------------------------------------------------
 
 export async function executeMcpAction(payload) {

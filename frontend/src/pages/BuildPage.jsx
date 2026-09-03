@@ -55,9 +55,6 @@ export default function BuildPage({ onNavigate }) {
   const progressItems = [
     { label: 'Agent Name', done: !!config.agentName.trim() },
     { label: 'AI Engine', done: !!config.ai_validated },
-    { label: 'Language', done: !!config.language },
-    { label: 'Framework', done: !!config.framework },
-    { label: 'Layout', done: !!config.framework_layout },
     { label: 'Workflow', done: !!config.workflow_prompt },
   ]
   const allReady = progressItems.every((i) => i.done)
@@ -196,7 +193,7 @@ export default function BuildPage({ onNavigate }) {
         </SectionCard>
 
         {/* 2. Language */}
-        <SectionCard index={2} title="Choose Coding Language" subtitle="Language your automation scripts will be generated in" accent="#f59e0b" icon={FiCode} done={!!config.language}>
+        <SectionCard index={2} title="Choose Coding Language (optional)" subtitle="Only needed if this agent generates automation code" accent="#f59e0b" icon={FiCode} done={!!config.language}>
           <select
             className="border border-slate-300 rounded-lg px-3 py-2 w-full"
             value={config.language}
@@ -208,7 +205,7 @@ export default function BuildPage({ onNavigate }) {
         </SectionCard>
 
         {/* 3. Framework */}
-        <SectionCard index={3} title="Choose Testing Framework" subtitle="See a live sample the moment you pick one" accent="#ec4899" icon={FiLayers} done={!!config.framework}>
+        <SectionCard index={3} title="Choose Testing Framework (optional)" subtitle="Skip this for non-code agents, e.g. manual test case generation" accent="#ec4899" icon={FiLayers} done={!!config.framework}>
           <div className="flex flex-col gap-4">
             <select
               className="border border-slate-300 rounded-lg px-3 py-2 w-full"
@@ -224,7 +221,7 @@ export default function BuildPage({ onNavigate }) {
         </SectionCard>
 
         {/* 4. Layout */}
-        <SectionCard index={4} title="Choose Framework Layout" subtitle="Folder / pattern convention for generated code" accent="#06b6d4" icon={FiGrid} done={!!config.framework_layout}>
+        <SectionCard index={4} title="Choose Framework Layout (optional)" subtitle="Folder / pattern convention for generated code" accent="#06b6d4" icon={FiGrid} done={!!config.framework_layout}>
           {!config.framework && <p className="text-sm text-slate-500">Pick a framework first.</p>}
           <div className="flex gap-3 flex-wrap">
             {(framework?.layouts || []).map((l) => (
@@ -278,7 +275,7 @@ export default function BuildPage({ onNavigate }) {
 
           {!allReady && (
             <p className="text-sm text-amber-600">
-              Complete all sections above (validated AI token, language, framework + layout, workflow prompt) before building.
+              You need an Agent Name, a validated AI Engine, and a Workflow Prompt before building. Language and Framework are optional — skip them for non-code agents like manual test case generation.
             </p>
           )}
 

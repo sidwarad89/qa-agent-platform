@@ -1,12 +1,40 @@
 import React, { useEffect, useState } from 'react'
 import {
   FiPlus, FiTrash2, FiPlay, FiCheckCircle, FiRotateCcw, FiPaperclip, FiExternalLink, FiLink, FiZap,
+  FiCpu, FiGrid, FiChevronDown, FiChevronUp,
 } from 'react-icons/fi'
 import { fetchMyAgents, createAgenticProcess, runAgenticStep, approveAgenticStep } from '../api/client'
 import { getProvider } from '../data/aiModels'
 import { GoldenChainIllustration } from '../components/illustrations/Illustrations'
 
 const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json']
+
+function CollapsiblePanel({ title, icon: Icon, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-50"
+      >
+        <Icon className="text-indigo-500" size={16} />
+        <span className="flex-1 text-sm font-semibold text-slate-700">{title}</span>
+        {open ? <FiChevronUp className="text-slate-400" /> : <FiChevronDown className="text-slate-400" />}
+      </button>
+      {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  )
+}
+
+function FlowNode({ label, isStart }) {
+  return (
+    <div className={`flex items-center justify-center rounded-full font-semibold text-sm shrink-0 ${
+      isStart ? 'w-24 h-24 bg-white border-2 border-slate-300 text-slate-700 text-center' : ''
+    }`}>
+      {label}
+    </div>
+  )
+}
 
 function readFileAsText(file) {
   return new Promise((resolve) => {
@@ -39,8 +67,8 @@ export default function AgenticProcessPage() {
 
   const getAgent = (id) => myAgents.find((a) => a.id === Number(id))
 
-  const addChainItem = () => setChain((c) => [...c, {
-    agentId: myAgents[0]?.id || '', hilEnabled: true, mcpEnabled: false,
+  const addChainItem = (agentId) => setChain((c) => [...c, {
+    agentId: agentId ?? (myAgents[0]?.id || ''), hilEnabled: true, mcpEnabled: false,
     mcp: { base_url: '', username: '', api_key: '', project_key: '', parent_item_id: '' },
   }])
   const removeChainItem = (i) => setChain((c) => c.filter((_, idx) => idx !== i))
@@ -152,101 +180,125 @@ export default function AgenticProcessPage() {
   // ---- Setup screen ----
   if (phase === 'setup') {
     return (
-      <div className="max-w-3xl mx-auto py-10 px-6 flex flex-col gap-6">
+      <div className="max-w-6xl mx-auto py-8 px-6 flex flex-col gap-6">
         <div className="flex items-start gap-4">
-          <GoldenChainIllustration className="w-32 h-20 shrink-0" />
+          <GoldenChainIllustration className="w-28 h-16 shrink-0" />
           <div>
             <h1 className="text-2xl font-bold text-slate-800">New Agentic Process</h1>
             <p className="text-slate-500 text-sm mt-1">
-              Chain your already-built agents together. Add a Human-in-Loop checkpoint wherever you want to review
-              before continuing — skip it anywhere you want the chain to run straight through.
+              Pick agents from the left panel to chain them together. Add a Human-in-Loop checkpoint wherever you
+              want to review before continuing — skip it anywhere you want the chain to run straight through.
             </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-slate-600">Process name</label>
-            <input className="border border-slate-300 rounded-lg px-3 py-2" value={processName} onChange={(e) => setProcessName(e.target.value)} placeholder="e.g. Scenario → Test Case → Uploader pipeline" />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-800">Agent Chain</h2>
-            <button onClick={addChainItem} className="text-sm text-indigo-600 flex items-center gap-1"><FiPlus /> Add agent</button>
-          </div>
-
-          {chain.length === 0 && (
-            <p className="text-sm text-slate-400 bg-white border border-dashed border-slate-300 rounded-xl p-6 text-center">
-              Click "Add agent" to pick your first agent from the ones you've built.
-            </p>
-          )}
-
-          {chain.map((item, i) => {
-            const agent = getAgent(item.agentId)
-            return (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                  <select
-                    className="flex-1 border border-slate-300 rounded-lg px-2 py-1.5 text-sm"
-                    value={item.agentId}
-                    onChange={(e) => updateChainItem(i, 'agentId', e.target.value)}
-                  >
-                    {myAgents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                  <button onClick={() => removeChainItem(i)} className="text-slate-400 hover:text-red-500"><FiTrash2 size={14} /></button>
-                </div>
-                {agent && (
-                  <p className="text-xs text-slate-400 pl-8">{agent.ai_provider} · {agent.ai_model_version}</p>
-                )}
-
-                <label className="flex items-center gap-2 text-xs text-slate-600 pl-8">
-                  <input type="checkbox" checked={item.hilEnabled} onChange={(e) => updateChainItem(i, 'hilEnabled', e.target.checked)} />
-                  Add Human-in-Loop checkpoint after this agent (pause for review)
-                </label>
-                {!item.hilEnabled && (
-                  <p className="text-xs text-slate-400 pl-8 flex items-center gap-1"><FiZap size={11} /> Will auto-continue straight to the next agent</p>
-                )}
-
-                <label className="flex items-center gap-2 text-xs text-slate-500 pl-8">
-                  <input type="checkbox" checked={item.mcpEnabled} onChange={(e) => updateChainItem(i, 'mcpEnabled', e.target.checked)} />
-                  <FiLink size={12} /> Also push this agent's output into Jira as a subtask
-                </label>
-                {item.mcpEnabled && (
-                  <div className="grid grid-cols-2 gap-2 ml-8 bg-slate-50 rounded-lg p-3">
-                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs col-span-2" placeholder="Jira Base URL" value={item.mcp.base_url} onChange={(e) => updateChainMcp(i, 'base_url', e.target.value)} />
-                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Email" value={item.mcp.username} onChange={(e) => updateChainMcp(i, 'username', e.target.value)} />
-                    <input type="password" className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="API Token" value={item.mcp.api_key} onChange={(e) => updateChainMcp(i, 'api_key', e.target.value)} />
-                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Project Key" value={item.mcp.project_key} onChange={(e) => updateChainMcp(i, 'project_key', e.target.value)} />
-                    <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Parent Issue ID" value={item.mcp.parent_item_id} onChange={(e) => updateChainMcp(i, 'parent_item_id', e.target.value)} />
-                  </div>
-                )}
+        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 items-start">
+          {/* Left panel: Process Information + My Agents picker */}
+          <div className="flex flex-col gap-4">
+            <CollapsiblePanel title="Process Information" icon={FiGrid} defaultOpen>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-slate-500">Name</label>
+                <input
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  value={processName} onChange={(e) => setProcessName(e.target.value)}
+                  placeholder="e.g. Scenario → Test Case → Uploader pipeline"
+                />
               </div>
-            )
-          })}
-        </div>
+            </CollapsiblePanel>
 
-        {usedProviders.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
-            <h2 className="font-semibold text-slate-800 text-sm">API Keys</h2>
-            <p className="text-xs text-slate-500 -mt-2">One key per AI engine used by the agents in this chain.</p>
-            {usedProviders.map((p) => {
-              const def = getProvider(p)
-              return (
-                <div key={p} className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-600">{def?.label || p}</label>
-                  <input
-                    type="password" className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                    value={apiKeys[p] || ''} onChange={(e) => setApiKeys((k) => ({ ...k, [p]: e.target.value }))}
-                    placeholder={def?.keyFormatHint}
-                  />
+            <CollapsiblePanel title="My Agents" icon={FiCpu} defaultOpen>
+              {myAgents.length === 0 ? (
+                <p className="text-xs text-slate-400">No agents built yet.</p>
+              ) : (
+                <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+                  {myAgents.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => addChainItem(a.id)}
+                      className="w-full text-left flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                    >
+                      <span className="text-sm text-slate-700 truncate">{a.name}</span>
+                      <FiPlus className="text-indigo-600 shrink-0" size={14} />
+                    </button>
+                  ))}
                 </div>
-              )
-            })}
+              )}
+            </CollapsiblePanel>
+
+            {usedProviders.length > 0 && (
+              <CollapsiblePanel title="API Keys" icon={FiCpu} defaultOpen>
+                <p className="text-xs text-slate-500 -mt-1 mb-1">One key per AI engine used in this chain.</p>
+                <div className="flex flex-col gap-2">
+                  {usedProviders.map((p) => {
+                    const def = getProvider(p)
+                    return (
+                      <div key={p} className="flex flex-col gap-1">
+                        <label className="text-xs font-medium text-slate-600">{def?.label || p}</label>
+                        <input
+                          type="password" className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                          value={apiKeys[p] || ''} onChange={(e) => setApiKeys((k) => ({ ...k, [p]: e.target.value }))}
+                          placeholder={def?.keyFormatHint}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </CollapsiblePanel>
+            )}
           </div>
-        )}
+
+          {/* Right: the flow canvas */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 min-h-[420px]">
+            <div className="relative flex flex-col items-start gap-0 pl-6">
+              <FlowNode label="Start Flow" isStart />
+              {chain.length === 0 && (
+                <div className="ml-4 mt-2 text-sm text-slate-400 border border-dashed border-slate-300 rounded-xl px-4 py-6 max-w-md">
+                  Click an agent on the left to add it here — it'll connect right below Start Flow.
+                </div>
+              )}
+              {chain.map((item, i) => {
+                const agent = getAgent(item.agentId)
+                return (
+                  <React.Fragment key={i}>
+                    <div className="w-px h-8 bg-slate-300 ml-6" />
+                    <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{agent?.name || 'Unknown agent'}</p>
+                          {agent && <p className="text-xs text-slate-400">{agent.ai_provider} · {agent.ai_model_version}</p>}
+                        </div>
+                        <button onClick={() => removeChainItem(i)} className="text-slate-400 hover:text-red-500 shrink-0"><FiTrash2 size={14} /></button>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-xs text-slate-600 pl-9">
+                        <input type="checkbox" checked={item.hilEnabled} onChange={(e) => updateChainItem(i, 'hilEnabled', e.target.checked)} />
+                        Add Human-in-Loop checkpoint after this agent (pause for review)
+                      </label>
+                      {!item.hilEnabled && (
+                        <p className="text-xs text-slate-400 pl-9 flex items-center gap-1"><FiZap size={11} /> Will auto-continue straight to the next agent</p>
+                      )}
+
+                      <label className="flex items-center gap-2 text-xs text-slate-500 pl-9">
+                        <input type="checkbox" checked={item.mcpEnabled} onChange={(e) => updateChainItem(i, 'mcpEnabled', e.target.checked)} />
+                        <FiLink size={12} /> Also push this agent's output into Jira as a subtask
+                      </label>
+                      {item.mcpEnabled && (
+                        <div className="grid grid-cols-2 gap-2 ml-9 bg-white rounded-lg p-3 border border-slate-200">
+                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs col-span-2" placeholder="Jira Base URL" value={item.mcp.base_url} onChange={(e) => updateChainMcp(i, 'base_url', e.target.value)} />
+                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Email" value={item.mcp.username} onChange={(e) => updateChainMcp(i, 'username', e.target.value)} />
+                          <input type="password" className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="API Token" value={item.mcp.api_key} onChange={(e) => updateChainMcp(i, 'api_key', e.target.value)} />
+                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Project Key" value={item.mcp.project_key} onChange={(e) => updateChainMcp(i, 'project_key', e.target.value)} />
+                          <input className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs" placeholder="Parent Issue ID" value={item.mcp.parent_item_id} onChange={(e) => updateChainMcp(i, 'parent_item_id', e.target.value)} />
+                        </div>
+                      )}
+                    </div>
+                  </React.Fragment>
+                )
+              })}
+            </div>
+          </div>
+        </div>
 
         <button
           onClick={startProcess}

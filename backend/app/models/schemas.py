@@ -32,13 +32,13 @@ class AgentConfig(BaseModel):
     ai_provider: str
     ai_model_version: str
     ai_api_key: str
-    language: str
+    language: Optional[str] = None
     input_tool: Optional[str] = None
     input_credentials: Optional[Dict[str, Any]] = {}
     output_tool: Optional[str] = None
     output_credentials: Optional[Dict[str, Any]] = {}
-    framework: str
-    framework_layout: str
+    framework: Optional[str] = None
+    framework_layout: Optional[str] = None
     custom_framework_details: Optional[str] = None
     custom_framework_files: Optional[List[Dict[str, Any]]] = None
     custom_layout_details: Optional[str] = None
@@ -106,6 +106,16 @@ class ProfileStats(BaseModel):
     agents_count: int
     processes_count: int
     reviews_count: int
+
+
+class DailyUsagePoint(BaseModel):
+    date: str  # "YYYY-MM-DD"
+    agents_created: int
+    processes_created: int
+
+
+class UsageAnalytics(BaseModel):
+    days: List[DailyUsagePoint]
 
 
 class AgentRecordCreate(BaseModel):

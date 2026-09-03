@@ -20,6 +20,7 @@ import McpPage from './pages/McpPage'
 import AgenticProcessPage from './pages/AgenticProcessPage'
 import ProfilePage from './pages/ProfilePage'
 import ManagePage from './pages/ManagePage'
+import AnalyticsPage from './pages/AnalyticsPage'
 
 function Console() {
   const { user, logoutUser } = useAuth()
@@ -62,6 +63,7 @@ function Console() {
             <Route path="/agentic" element={<AgenticProcessPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/manage" element={user?.isAdmin ? <ManagePage /> : <Navigate to="/" replace />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

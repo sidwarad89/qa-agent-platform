@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  FiHome, FiTool, FiShare2, FiUser, FiLogOut, FiMessageSquare, FiShield, FiCpu, FiDroplet, FiSettings,
+  FiHome, FiTool, FiShare2, FiUser, FiLogOut, FiMessageSquare, FiShield, FiCpu, FiDroplet, FiSettings, FiBarChart2,
 } from 'react-icons/fi'
 import { useTheme, THEMES } from '../../context/ThemeContext'
 import { GoldenChainIllustration } from '../illustrations/Illustrations'
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { id: 'agents', label: 'Agents', icon: FiCpu },
   { id: 'mcp', label: 'MCP Tools', icon: FiShare2 },
   { id: 'agentic', label: 'Agentic Process', icon: 'golden-chain' },
+  { id: 'analytics', label: 'Analytics', icon: FiBarChart2 },
 ]
 
 export default function Sidebar({ active, onNavigate, username, avatarUrl, isAdmin, onLogout, onToggleChat }) {
