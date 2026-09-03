@@ -49,9 +49,13 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == payload.username).first()
+    user = (
+        db.query(User)
+        .filter((User.username == payload.identifier) | (User.email == payload.identifier))
+        .first()
+    )
     if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect username or password.")
+        raise HTTPException(status_code=401, detail="Incorrect username/email or password.")
 
     # Bootstrap admin rights if this username is listed in ADMIN_USERNAMES.
     # Synced BOTH ways on every login so removing a name from ADMIN_USERNAMES

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AgentConfigProvider } from './context/AgentConfigContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
@@ -22,34 +23,27 @@ import ManagePage from './pages/ManagePage'
 function Console() {
   const { user, logoutUser } = useAuth()
   const { theme } = useTheme()
-  const [active, setActive] = useState('myspace')
+  const navigate = useNavigate()
+  const location = useLocation()
+  const active = location.pathname === '/' ? 'myspace' : location.pathname.replace('/', '')
+
   const [chatOpen, setChatOpen] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(() => !sessionStorage.getItem('qa_onboarding_shown'))
 
   useEffect(() => { trackVisit('/console') }, [])
+
+  const goTo = (id) => navigate(id === 'myspace' ? '/' : `/${id}`)
 
   const closeOnboarding = () => {
     sessionStorage.setItem('qa_onboarding_shown', 'true')
     setOnboardingOpen(false)
   }
 
-  const renderPage = () => {
-    switch (active) {
-      case 'build': return <BuildPage onNavigate={setActive} />
-      case 'agents': return <AgentsPage onNavigate={setActive} />
-      case 'mcp': return <McpPage />
-      case 'agentic': return <AgenticProcessPage />
-      case 'profile': return <ProfilePage />
-      case 'manage': return user?.isAdmin ? <ManagePage /> : <MySpacePage onNavigate={setActive} onOpenGuide={() => setOnboardingOpen(true)} />
-      default: return <MySpacePage onNavigate={setActive} onOpenGuide={() => setOnboardingOpen(true)} />
-    }
-  }
-
   return (
     <div className={`h-screen flex ${theme.className}`}>
       <Sidebar
         active={active}
-        onNavigate={setActive}
+        onNavigate={goTo}
         username={user?.username}
         avatarUrl={user?.avatarUrl}
         isAdmin={user?.isAdmin}
@@ -58,7 +52,18 @@ function Console() {
       />
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar active={active} />
-        <main className="flex-1 overflow-y-auto">{renderPage()}</main>
+        <main className="flex-1 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<MySpacePage onNavigate={goTo} onOpenGuide={() => setOnboardingOpen(true)} />} />
+            <Route path="/build" element={<BuildPage onNavigate={goTo} />} />
+            <Route path="/agents" element={<AgentsPage onNavigate={goTo} />} />
+            <Route path="/mcp" element={<McpPage />} />
+            <Route path="/agentic" element={<AgenticProcessPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/manage" element={user?.isAdmin ? <ManagePage /> : <Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
       </div>
       <ChatBotWidget open={chatOpen} onClose={() => setChatOpen(false)} />
       <OnboardingGuide open={onboardingOpen} onClose={closeOnboarding} />
@@ -87,10 +92,12 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <AuthGate />
-      </ThemeProvider>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ThemeProvider>
+          <AuthGate />
+        </ThemeProvider>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }

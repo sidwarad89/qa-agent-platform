@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 
 export default function SignIn({ onSwitchToSignUp }) {
   const { loginUser } = useAuth()
-  const [username, setUsername] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -14,10 +14,10 @@ export default function SignIn({ onSwitchToSignUp }) {
     setError('')
     setLoading(true)
     try {
-      const data = await login({ username, password })
+      const data = await login({ identifier, password })
       loginUser(data.username, data.access_token, data.is_admin)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not sign in. Check your username and password.')
+      setError(err?.response?.data?.detail || 'Could not sign in. Check your username/email and password.')
     } finally {
       setLoading(false)
     }
@@ -33,8 +33,8 @@ export default function SignIn({ onSwitchToSignUp }) {
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-slate-600">Username</label>
-          <input className="border border-slate-300 rounded-lg px-3 py-2.5" value={username} onChange={(e) => setUsername(e.target.value)} required />
+          <label className="text-sm font-medium text-slate-600">Username or Email</label>
+          <input className="border border-slate-300 rounded-lg px-3 py-2.5" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
         </div>
 
         <div className="flex flex-col gap-1">
