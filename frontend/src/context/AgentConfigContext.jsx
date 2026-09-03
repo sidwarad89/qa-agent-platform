@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { scopedKey } from '../utils/scopedStorage'
 
 const AgentConfigContext = createContext(null)
-const STORAGE_KEY = 'qa_agent_build_draft'
 
 const initialConfig = {
   agentName: '',
@@ -17,7 +17,7 @@ const initialConfig = {
 
 function loadDraft() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const saved = localStorage.getItem(scopedKey('qa_agent_build_draft'))
     if (!saved) return initialConfig
     // API keys are intentionally never persisted, even in a draft - re-enter after refresh.
     return { ...initialConfig, ...JSON.parse(saved), ai_api_key: '', ai_validated: false }
@@ -31,13 +31,13 @@ export function AgentConfigProvider({ children }) {
 
   useEffect(() => {
     const { ai_api_key, ...toSave } = config
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+    localStorage.setItem(scopedKey('qa_agent_build_draft'), JSON.stringify(toSave))
   }, [config])
 
   const updateConfig = (patch) => setConfig((prev) => ({ ...prev, ...patch }))
 
   const clearDraft = () => {
-    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(scopedKey('qa_agent_build_draft'))
     setConfig(initialConfig)
   }
 

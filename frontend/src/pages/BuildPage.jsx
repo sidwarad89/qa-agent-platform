@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import {
   FiCpu, FiCode, FiLayers, FiGrid, FiPaperclip, FiPlayCircle, FiShare2,
+  FiCheckCircle, FiRotateCcw,
 } from 'react-icons/fi'
 import { useAgentConfig } from '../context/AgentConfigContext'
 import { validateModelToken, buildAgent, recordAgentBuilt } from '../api/client'
@@ -8,6 +9,22 @@ import { validateModelToken, buildAgent, recordAgentBuilt } from '../api/client'
 import { AI_MODELS, getProvider } from '../data/aiModels'
 import { LANGUAGES } from '../data/languages'
 import { FRAMEWORKS, getFramework } from '../data/frameworks'
+
+const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json']
+
+function readFileAsText(file) {
+  return new Promise((resolve) => {
+    const ext = file.name.split('.').pop().toLowerCase()
+    if (!TEXT_EXTENSIONS.includes(ext)) {
+      resolve(`[Attached file: ${file.name} - binary content not extracted, but flagged by reviewer for context]`)
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => resolve(`[Could not read attached file: ${file.name}]`)
+    reader.readAsText(file)
+  })
+}
 
 import SectionCard from '../components/shared/SectionCard'
 import ChoiceCard from '../components/shared/ChoiceCard'
@@ -52,6 +69,13 @@ export default function BuildPage({ onNavigate }) {
   const [events, setEvents] = useState([])
   const [running, setRunning] = useState(false)
 
+  // Human-in-the-loop review of this agent's own output, same pattern as Agentic Process.
+  const [reviewStatus, setReviewStatus] = useState('idle') // idle | awaiting_review | approved
+  const [reviewFeedback, setReviewFeedback] = useState('')
+  const [reviewFileNote, setReviewFileNote] = useState('')
+  const [reviewFileName, setReviewFileName] = useState('')
+  const [commentTouched, setCommentTouched] = useState(false)
+
   const progressItems = [
     { label: 'Agent Name', done: !!config.agentName.trim() },
     { label: 'AI Engine', done: !!config.ai_validated },
@@ -59,9 +83,11 @@ export default function BuildPage({ onNavigate }) {
   ]
   const allReady = progressItems.every((i) => i.done)
 
-  const handleBuild = async () => {
+  const handleBuild = async (feedback = null) => {
     setEvents([])
     setRunning(true)
+    setReviewStatus('idle')
+    setCommentTouched(false)
 
     try {
       await recordAgentBuilt({
@@ -73,6 +99,11 @@ export default function BuildPage({ onNavigate }) {
       })
     } catch {
       // non-critical — profile stat just won't increment if this fails
+    }
+
+    let workflowPrompt = config.workflow_prompt
+    if (feedback) {
+      workflowPrompt += `\n\n--- Reviewer feedback on the previous attempt (address this) ---\n${feedback}`
     }
 
     const payload = {
@@ -87,14 +118,34 @@ export default function BuildPage({ onNavigate }) {
         name: f.name, size: f.size, ext: f.ext, content: f.isTextEditable ? f.content : null,
       })),
       custom_layout_details: config.custom_layout_details,
-      workflow_prompt: config.workflow_prompt,
+      workflow_prompt: workflowPrompt,
     }
     buildAgent(
       payload,
       (event) => setEvents((prev) => [...prev, event]),
-      () => { setRunning(false); clearDraft() },
+      () => { setRunning(false); setReviewStatus('awaiting_review') },
       () => setRunning(false),
     )
+  }
+
+  const handleGoodToGo = () => {
+    setReviewStatus('approved')
+    clearDraft()
+  }
+
+  const handleReExecute = () => {
+    const combined = [reviewFeedback, reviewFileNote].filter(Boolean).join('\n')
+    setReviewFeedback('')
+    setReviewFileNote('')
+    setReviewFileName('')
+    handleBuild(combined || 'Please regenerate with more care and precision.')
+  }
+
+  const handleFileAttach = async (file) => {
+    if (!file) return
+    const note = await readFileAsText(file)
+    setReviewFileNote(note)
+    setReviewFileName(file.name)
   }
 
   return (
@@ -295,6 +346,59 @@ export default function BuildPage({ onNavigate }) {
           </button>
 
           <ExecutionLog events={events} />
+
+          {reviewStatus === 'awaiting_review' && (() => {
+            const hasFeedback = !!(reviewFeedback || reviewFileNote)
+            const goodToGoBlurred = hasFeedback || commentTouched
+            return (
+              <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 mt-1">
+                <p className="text-sm font-medium text-slate-600">
+                  Verify the output above. If it's not quite right, leave a comment or attach a doc, then Re-Execute — or approve it as-is.
+                </p>
+                <textarea
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm h-20"
+                  placeholder="Optional: describe what to fix..."
+                  value={reviewFeedback}
+                  onFocus={() => setCommentTouched(true)}
+                  onChange={(e) => setReviewFeedback(e.target.value)}
+                />
+                <label className="text-xs text-indigo-600 flex items-center gap-1 cursor-pointer w-fit">
+                  <FiPaperclip /> {reviewFileName || 'Attach a doc (any file type)'}
+                  <input type="file" className="hidden" onChange={(e) => { setCommentTouched(true); handleFileAttach(e.target.files?.[0]) }} />
+                </label>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleGoodToGo}
+                    disabled={goodToGoBlurred}
+                    className={`flex-1 rounded-lg py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                      goodToGoBlurred
+                        ? 'bg-slate-100 text-slate-400 opacity-40 pointer-events-none blur-[0.5px]'
+                        : 'bg-emerald-600 text-white'
+                    }`}
+                  >
+                    <FiCheckCircle /> Good to go
+                  </button>
+                  <button
+                    onClick={handleReExecute}
+                    className={`flex-1 rounded-lg py-2.5 text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                      hasFeedback
+                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-300 ring-2 ring-amber-300 animate-pulse'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <FiRotateCcw /> Re-Execute
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+
+          {reviewStatus === 'approved' && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 text-emerald-700 text-sm font-medium flex items-center gap-2">
+              <FiCheckCircle /> Approved — this agent's output is good to go.
+            </div>
+          )}
         </div>
       </SectionCard>
     </div>

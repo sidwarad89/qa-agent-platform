@@ -12,6 +12,7 @@ import TopBar from './components/layout/TopBar'
 import ChatBotWidget from './components/ChatBotWidget'
 import AssistantToggle from './components/AssistantToggle'
 import OnboardingGuide from './components/OnboardingGuide'
+import ErrorBoundary from './components/ErrorBoundary'
 
 import MySpacePage from './pages/MySpacePage'
 import BuildPage from './pages/BuildPage'
@@ -55,17 +56,19 @@ function Console() {
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar active={active} />
         <main className="flex-1 overflow-y-auto">
-          <Routes>
-            <Route path="/" element={<MySpacePage onNavigate={goTo} onOpenGuide={() => setOnboardingOpen(true)} />} />
-            <Route path="/build" element={<BuildPage onNavigate={goTo} />} />
-            <Route path="/agents" element={<AgentsPage onNavigate={goTo} />} />
-            <Route path="/mcp" element={<McpPage />} />
-            <Route path="/agentic" element={<AgenticProcessPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/manage" element={user?.isAdmin ? <ManagePage /> : <Navigate to="/" replace />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <ErrorBoundary key={location.pathname}>
+            <Routes>
+              <Route path="/" element={<MySpacePage onNavigate={goTo} onOpenGuide={() => setOnboardingOpen(true)} />} />
+              <Route path="/build" element={<BuildPage onNavigate={goTo} />} />
+              <Route path="/agents" element={<AgentsPage onNavigate={goTo} />} />
+              <Route path="/mcp" element={<McpPage />} />
+              <Route path="/agentic" element={<AgenticProcessPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/manage" element={user?.isAdmin ? <ManagePage /> : <Navigate to="/" replace />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
       <AssistantToggle onClick={() => setChatOpen((c) => !c)} />

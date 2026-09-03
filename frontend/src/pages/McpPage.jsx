@@ -3,12 +3,11 @@ import { FiShield, FiCheck, FiLoader, FiAlertCircle, FiX } from 'react-icons/fi'
 import { MCP_TOOLS } from '../data/mcpTools'
 import { validateMcpTool } from '../api/client'
 import ApiKeyHelp from '../components/shared/ApiKeyHelp'
-
-const STORAGE_KEY = 'qa_mcp_connections'
+import { scopedKey } from '../utils/scopedStorage'
 
 function loadConnections() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const saved = localStorage.getItem(scopedKey('qa_mcp_connections'))
     return saved ? JSON.parse(saved) : {}
   } catch {
     return {}
@@ -24,9 +23,10 @@ export default function McpPage() {
 
   // Persist every time the connected-tools list changes, so a refresh (or
   // closing the tab) never silently disconnects anything - only an explicit
-  // Disconnect click does.
+  // Disconnect click does. Scoped per-user so this never leaks to the next
+  // person who logs in on the same browser.
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(connected))
+    localStorage.setItem(scopedKey('qa_mcp_connections'), JSON.stringify(connected))
   }, [connected])
 
   const openConnect = (tool) => {

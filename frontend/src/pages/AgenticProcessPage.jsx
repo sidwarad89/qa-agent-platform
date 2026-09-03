@@ -60,6 +60,7 @@ export default function AgenticProcessPage() {
   const [apiKeys, setApiKeys] = useState({}) // { [provider]: key }
 
   const [processId, setProcessId] = useState(null)
+  const [startError, setStartError] = useState('')
   // per index: { output, output_url, status, feedback, fileNote, fileName, running, commentTouched, error }
   const [runtimeSteps, setRuntimeSteps] = useState([])
 
@@ -131,11 +132,16 @@ export default function AgenticProcessPage() {
   }
 
   const startProcess = async () => {
-    const proc = await createAgenticProcess(processName || 'Untitled Process')
-    setProcessId(proc.id)
-    setPhase('running')
-    setRuntimeSteps(chain.map(() => ({})))
-    await runStep(0)
+    setStartError('')
+    try {
+      const proc = await createAgenticProcess(processName || 'Untitled Process')
+      setProcessId(proc.id)
+      setPhase('running')
+      setRuntimeSteps(chain.map(() => ({})))
+      await runStep(0)
+    } catch (err) {
+      setStartError(err?.response?.data?.detail || 'Could not start the process. Please try again.')
+    }
   }
 
   const handleGoodToGo = async (index) => {
@@ -299,6 +305,8 @@ export default function AgenticProcessPage() {
             </div>
           </div>
         </div>
+
+        {startError && <p className="text-sm text-red-600">{startError}</p>}
 
         <button
           onClick={startProcess}
