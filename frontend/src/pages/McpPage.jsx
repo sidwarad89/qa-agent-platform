@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { FiShield, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi'
 import { MCP_TOOLS } from '../data/mcpTools'
 import { validateMcpTool } from '../api/client'
+import ApiKeyHelp from '../components/shared/ApiKeyHelp'
 
 export default function McpPage() {
   const [connecting, setConnecting] = useState(null) // tool id
@@ -92,6 +93,8 @@ export default function McpPage() {
                   <li key={s} className="text-sm text-slate-600 flex items-center gap-2"><FiCheck className="text-emerald-500" /> {s}</li>
                 ))}
               </ul>
+
+              <ApiKeyHelp steps={activeTool.steps} label={`Don't know the ${activeTool.label} API token? How to get one?`} />
 
               <div className="border-t border-slate-200 pt-3 flex flex-col gap-2">
                 {activeTool.fields.map((f) => (
