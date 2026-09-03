@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 
 const AgentConfigContext = createContext(null)
+const STORAGE_KEY = 'qa_agent_build_draft'
 
 const initialConfig = {
+  agentName: '',
   ai_provider: '', ai_model_version: '', ai_api_key: '', ai_validated: false,
   language: '',
   input_tool: '', input_credentials: {}, input_validated: false,
@@ -13,11 +15,34 @@ const initialConfig = {
   workflow_prompt: '',
 }
 
+function loadDraft() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (!saved) return initialConfig
+    // API keys are intentionally never persisted, even in a draft - re-enter after refresh.
+    return { ...initialConfig, ...JSON.parse(saved), ai_api_key: '', ai_validated: false }
+  } catch {
+    return initialConfig
+  }
+}
+
 export function AgentConfigProvider({ children }) {
-  const [config, setConfig] = useState(initialConfig)
+  const [config, setConfig] = useState(loadDraft)
+
+  useEffect(() => {
+    const { ai_api_key, ...toSave } = config
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+  }, [config])
+
   const updateConfig = (patch) => setConfig((prev) => ({ ...prev, ...patch }))
+
+  const clearDraft = () => {
+    localStorage.removeItem(STORAGE_KEY)
+    setConfig(initialConfig)
+  }
+
   return (
-    <AgentConfigContext.Provider value={{ config, updateConfig }}>
+    <AgentConfigContext.Provider value={{ config, updateConfig, clearDraft }}>
       {children}
     </AgentConfigContext.Provider>
   )

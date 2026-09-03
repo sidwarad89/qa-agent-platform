@@ -22,8 +22,7 @@ import ExecutionLog from '../components/shared/ExecutionLog'
 const PLACEHOLDER = `e.g. "Pull user story QA-12 from Jira (connected under MCP Tools), generate 10-20 test scenarios and attach them back to that story as a subtask. Then generate 5-10 test cases covering positive, negative, and security testing techniques, upload them to TestRail section 8, then generate executable automation scripts using the selected framework."`
 
 export default function BuildPage({ onNavigate }) {
-  const { config, updateConfig } = useAgentConfig()
-  const [agentName, setAgentName] = useState('')
+  const { config, updateConfig, clearDraft } = useAgentConfig()
 
   const provider = getProvider(config.ai_provider)
   const selectedVersion = provider?.versions.find((v) => v.id === config.ai_model_version)
@@ -54,7 +53,7 @@ export default function BuildPage({ onNavigate }) {
   const [running, setRunning] = useState(false)
 
   const progressItems = [
-    { label: 'Agent Name', done: !!agentName.trim() },
+    { label: 'Agent Name', done: !!config.agentName.trim() },
     { label: 'AI Engine', done: !!config.ai_validated },
     { label: 'Language', done: !!config.language },
     { label: 'Framework', done: !!config.framework },
@@ -69,7 +68,7 @@ export default function BuildPage({ onNavigate }) {
 
     try {
       await recordAgentBuilt({
-        name: agentName.trim() || 'Untitled Agent',
+        name: config.agentName.trim() || 'Untitled Agent',
         ai_provider: config.ai_provider,
         ai_model_version: config.ai_model_version,
         framework: config.framework,
@@ -96,7 +95,7 @@ export default function BuildPage({ onNavigate }) {
     buildAgent(
       payload,
       (event) => setEvents((prev) => [...prev, event]),
-      () => setRunning(false),
+      () => { setRunning(false); clearDraft() },
       () => setRunning(false),
     )
   }
@@ -120,8 +119,8 @@ export default function BuildPage({ onNavigate }) {
         <input
           className="border border-slate-300 rounded-lg px-3 py-2 w-full sm:w-96"
           placeholder="e.g. Test Scenario Generator Agent"
-          value={agentName}
-          onChange={(e) => setAgentName(e.target.value)}
+          value={config.agentName}
+          onChange={(e) => updateConfig({ agentName: e.target.value })}
         />
         <p className="text-xs text-slate-400">Give it a clear name — this is how you'll pick it later when chaining agents in an Agentic Process.</p>
       </div>
