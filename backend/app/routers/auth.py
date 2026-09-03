@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -43,7 +44,11 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     except Exception:
         pass  # never block signup on email failures
 
-    token = create_access_token({"sub": str(user.id)})
+    session_id = uuid.uuid4().hex
+    user.current_session_id = session_id
+    db.commit()
+
+    token = create_access_token({"sub": str(user.id), "sid": session_id})
     return TokenResponse(access_token=token, username=user.username, is_admin=user.is_admin)
 
 
@@ -62,15 +67,28 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     # revokes access immediately - is_admin can never be set any other way.
     user.is_admin = is_admin_username(user.username)
     user.last_login = datetime.utcnow()
+
+    # A fresh session id invalidates any token issued by a previous login,
+    # anywhere - that's what enforces "only one active login at a time."
+    session_id = uuid.uuid4().hex
+    user.current_session_id = session_id
     db.commit()
 
-    token = create_access_token({"sub": str(user.id)})
+    token = create_access_token({"sub": str(user.id), "sid": session_id})
     return TokenResponse(access_token=token, username=user.username, is_admin=user.is_admin)
 
 
 @router.get("/me", response_model=UserOut)
 def read_current_user(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/logout")
+def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Clears the session id so the current token can't be reused even if it leaks."""
+    current_user.current_session_id = None
+    db.commit()
+    return {"success": True}
 
 
 @router.patch("/profile", response_model=UserOut)

@@ -16,6 +16,7 @@ class User(Base):
     avatar_data = Column(Text, nullable=True)  # base64 data URL, kept small (resized client-side)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login = Column(DateTime(timezone=True), nullable=True)
+    current_session_id = Column(String, nullable=True)  # only the token matching this stays valid
 
     agents = relationship("AgentRecord", back_populates="owner", cascade="all, delete-orphan")
     processes = relationship("AgenticProcess", back_populates="owner", cascade="all, delete-orphan")

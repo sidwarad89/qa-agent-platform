@@ -14,6 +14,22 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// If any authenticated call comes back 401, the session is no longer valid -
+// most commonly because this account just logged in somewhere else. Force a
+// clean logout everywhere except the login/signup screens themselves (those
+// return 401 for plain "wrong password", which isn't a session issue).
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const isAuthEndpoint = err.config?.url?.includes('/api/auth/login') || err.config?.url?.includes('/api/auth/signup')
+    if (err.response?.status === 401 && !isAuthEndpoint) {
+      const message = err.response?.data?.detail || 'You were signed out.'
+      window.dispatchEvent(new CustomEvent('qa-agent-session-invalidated', { detail: message }))
+    }
+    return Promise.reject(err)
+  }
+)
+
 // ---- AI model validation -------------------------------------------------
 
 export async function validateModelToken(payload) {
@@ -68,6 +84,10 @@ export async function signup(payload) {
 export async function login(payload) {
   const { data } = await api.post('/api/auth/login', payload)
   return data
+}
+
+export async function logout() {
+  try { await api.post('/api/auth/logout') } catch { /* best-effort */ }
 }
 
 export async function fetchCurrentUser() {

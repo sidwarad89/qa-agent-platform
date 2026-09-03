@@ -3,7 +3,7 @@ import { login } from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
 
 export default function SignIn({ onSwitchToSignUp }) {
-  const { loginUser } = useAuth()
+  const { loginUser, sessionMessage } = useAuth()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -31,6 +31,10 @@ export default function SignIn({ onSwitchToSignUp }) {
           <h1 className="text-2xl font-bold text-slate-800">Welcome back</h1>
           <p className="text-sm text-slate-500 mt-1">Sign in to QA Agent Builder</p>
         </div>
+
+        {sessionMessage && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{sessionMessage}</p>
+        )}
 
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium text-slate-600">Username or Email</label>

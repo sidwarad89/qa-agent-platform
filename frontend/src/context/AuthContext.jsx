@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { fetchCurrentUser } from '../api/client'
+import { fetchCurrentUser, logout as apiLogout } from '../api/client'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [sessionMessage, setSessionMessage] = useState('')
 
   useEffect(() => {
     const token = localStorage.getItem('qa_agent_token')
@@ -20,17 +21,33 @@ export function AuthProvider({ children }) {
     setLoading(false)
   }, [])
 
+  useEffect(() => {
+    const handler = (e) => {
+      setSessionMessage(e.detail || 'You were signed out.')
+      clearLocalSession()
+      setUser(null)
+    }
+    window.addEventListener('qa-agent-session-invalidated', handler)
+    return () => window.removeEventListener('qa-agent-session-invalidated', handler)
+  }, [])
+
+  const clearLocalSession = () => {
+    localStorage.removeItem('qa_agent_token')
+    localStorage.removeItem('qa_agent_username')
+    localStorage.removeItem('qa_agent_is_admin')
+  }
+
   const loginUser = (username, token, isAdmin = false) => {
     localStorage.setItem('qa_agent_token', token)
     localStorage.setItem('qa_agent_username', username)
     localStorage.setItem('qa_agent_is_admin', isAdmin ? 'true' : 'false')
+    setSessionMessage('')
     setUser({ username, isAdmin, avatarUrl: null })
   }
 
   const logoutUser = () => {
-    localStorage.removeItem('qa_agent_token')
-    localStorage.removeItem('qa_agent_username')
-    localStorage.removeItem('qa_agent_is_admin')
+    apiLogout() // best-effort - invalidates the token server-side too, not just locally
+    clearLocalSession()
     setUser(null)
   }
 
@@ -39,7 +56,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginUser, logoutUser, updateAvatar }}>
+    <AuthContext.Provider value={{ user, loading, loginUser, logoutUser, updateAvatar, sessionMessage, clearSessionMessage: () => setSessionMessage('') }}>
       {children}
     </AuthContext.Provider>
   )

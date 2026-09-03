@@ -49,9 +49,15 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         detail="Could not validate credentials. Please sign in again.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    session_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="You were signed out because this account was logged in from another device or tab.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
+        session_id = payload.get("sid")
         if user_id is None:
             raise credentials_exception
     except JWTError:
@@ -60,6 +66,12 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
+
+    # Only the token from the MOST RECENT login is valid - any earlier session
+    # (another tab, browser, or device) gets kicked out the next time it calls the API.
+    if user.current_session_id and session_id != user.current_session_id:
+        raise session_exception
+
     return user
 
 
