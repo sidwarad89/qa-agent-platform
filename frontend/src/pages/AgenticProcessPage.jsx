@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import {
   FiPlus, FiTrash2, FiPlay, FiCheckCircle, FiRotateCcw, FiPaperclip, FiExternalLink, FiLink, FiZap,
-  FiCpu, FiGrid, FiChevronDown, FiChevronUp,
+  FiCpu, FiGrid, FiChevronDown, FiChevronUp, FiEdit2, FiX,
 } from 'react-icons/fi'
-import { fetchMyAgents, createAgenticProcess, runAgenticStep, approveAgenticStep } from '../api/client'
+import { fetchMyAgents, createAgenticProcess, runAgenticStep, approveAgenticStep, confirmAgenticProcess, listAgenticProcesses, renameAgenticProcess, deleteAgenticProcess } from '../api/client'
 import { getProvider } from '../data/aiModels'
 import { getMcpTool } from '../data/mcpTools'
 import { useMcpConnections } from '../context/McpConnectionsContext'
@@ -56,6 +56,10 @@ export default function AgenticProcessPage() {
   const { connections } = useMcpConnections()
   const connectedToolIds = Object.keys(connections)
   const [myAgents, setMyAgents] = useState([])
+  const [savedProcesses, setSavedProcesses] = useState([])
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [confirmDeleteProcessId, setConfirmDeleteProcessId] = useState(null)
   const [phase, setPhase] = useState('setup') // setup | running
   const [processName, setProcessName] = useState('')
 
@@ -68,7 +72,22 @@ export default function AgenticProcessPage() {
   // per index: { output, output_url, status, feedback, fileNote, fileName, running, commentTouched, error }
   const [runtimeSteps, setRuntimeSteps] = useState([])
 
-  useEffect(() => { fetchMyAgents().then(setMyAgents).catch(() => {}) }, [])
+  const loadSavedProcesses = () => listAgenticProcesses().then(setSavedProcesses).catch(() => {})
+
+  useEffect(() => { fetchMyAgents().then(setMyAgents).catch(() => {}); loadSavedProcesses() }, [])
+
+  const startRenameProcess = (p) => { setRenamingId(p.id); setRenameValue(p.name) }
+  const cancelRenameProcess = () => { setRenamingId(null); setRenameValue('') }
+  const saveRenameProcess = async (id) => {
+    await renameAgenticProcess(id, renameValue)
+    cancelRenameProcess()
+    loadSavedProcesses()
+  }
+  const handleDeleteProcess = async (id) => {
+    await deleteAgenticProcess(id)
+    setConfirmDeleteProcessId(null)
+    loadSavedProcesses()
+  }
 
   const getAgent = (id) => myAgents.find((a) => a.id === Number(id))
 
@@ -122,7 +141,11 @@ export default function AgenticProcessPage() {
         setRuntimeSteps((rs) => {
           const copy = [...rs]; copy[index] = { ...copy[index], status: 'approved' }; return copy
         })
-        if (index + 1 < chain.length) await runStep(index + 1)
+        if (index + 1 < chain.length) {
+          await runStep(index + 1)
+        } else {
+          try { await confirmAgenticProcess(processId); loadSavedProcesses() } catch { /* non-critical */ }
+        }
       }
     } catch (err) {
       setRuntimeSteps((rs) => {
@@ -151,7 +174,13 @@ export default function AgenticProcessPage() {
     setRuntimeSteps((rs) => {
       const copy = [...rs]; copy[index] = { ...copy[index], status: 'approved' }; return copy
     })
-    if (index + 1 < chain.length) await runStep(index + 1)
+    if (index + 1 < chain.length) {
+      await runStep(index + 1)
+    } else {
+      // This was the last step - the whole process is now considered "saved"
+      // and only from this point does it count toward stats/Analytics.
+      try { await confirmAgenticProcess(processId); loadSavedProcesses() } catch { /* non-critical */ }
+    }
   }
 
   const handleReExecute = async (index) => {
@@ -199,6 +228,48 @@ export default function AgenticProcessPage() {
             </p>
           </div>
         </div>
+
+        {savedProcesses.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col gap-3">
+            <h2 className="font-semibold text-slate-800 text-sm">Saved Processes</h2>
+            <div className="flex flex-col gap-2">
+              {savedProcesses.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
+                  {renamingId === p.id ? (
+                    <>
+                      <input
+                        className="flex-1 border border-slate-300 rounded-lg px-2 py-1 text-sm"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        autoFocus
+                      />
+                      <button onClick={() => saveRenameProcess(p.id)} className="text-emerald-600 hover:text-emerald-700"><FiCheckCircle size={16} /></button>
+                      <button onClick={cancelRenameProcess} className="text-slate-400 hover:text-slate-600"><FiX size={16} /></button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700 truncate">{p.name}</p>
+                        <p className="text-xs text-slate-400">{p.steps.length} step{p.steps.length !== 1 ? 's' : ''} · {new Date(p.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <button onClick={() => startRenameProcess(p)} title="Rename" className="text-slate-400 hover:text-indigo-600"><FiEdit2 size={14} /></button>
+                      <button onClick={() => setConfirmDeleteProcessId(p.id)} title="Delete" className="text-slate-400 hover:text-red-500"><FiTrash2 size={14} /></button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {confirmDeleteProcessId && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center justify-between gap-3">
+                  <p className="text-xs text-red-700">Delete this process and its history permanently?</p>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => setConfirmDeleteProcessId(null)} className="text-xs border border-slate-300 rounded-lg px-3 py-1 text-slate-600">Cancel</button>
+                    <button onClick={() => handleDeleteProcess(confirmDeleteProcessId)} className="text-xs bg-red-600 text-white rounded-lg px-3 py-1 font-medium">Delete</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 items-start">
           {/* Left panel: Process Information + My Agents picker */}

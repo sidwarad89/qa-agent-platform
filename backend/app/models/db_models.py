@@ -47,6 +47,10 @@ class AgenticProcess(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=False)
+    # Only counted in stats/analytics once every step has actually been approved -
+    # a process row must exist earlier than that (steps need a parent id to attach
+    # to), but an in-progress or abandoned run should never inflate the user's stats.
+    confirmed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", back_populates="processes")

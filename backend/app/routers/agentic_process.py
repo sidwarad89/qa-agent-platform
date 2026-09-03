@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.db_models import User, AgenticProcess, AgenticStep
 from app.models.schemas import (
-    AgenticProcessCreate, AgenticProcessOut,
+    AgenticProcessCreate, AgenticProcessUpdate, AgenticProcessOut,
     AgenticStepRunRequest, AgenticStepOut,
 )
 from app.services.auth_service import get_current_user
@@ -142,9 +142,11 @@ def create_process(payload: AgenticProcessCreate, current_user: User = Depends(g
 
 @router.get("/process", response_model=List[AgenticProcessOut])
 def list_processes(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Only ever-approved (confirmed) processes show here - abandoned/in-progress
+    runs never got 'saved' in the first place."""
     processes = (
         db.query(AgenticProcess)
-        .filter(AgenticProcess.user_id == current_user.id)
+        .filter(AgenticProcess.user_id == current_user.id, AgenticProcess.confirmed == True)
         .order_by(AgenticProcess.created_at.desc())
         .all()
     )
@@ -252,3 +254,39 @@ def approve_step(
     db.commit()
     db.refresh(step)
     return AgenticStepOut.model_validate(step)
+
+
+@router.post("/process/{process_id}/confirm")
+def confirm_process(process_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Called once the whole chain has been approved end-to-end - only NOW does
+    this process count toward the user's stats and Analytics."""
+    process = _get_owned_process(process_id, current_user, db)
+    process.confirmed = True
+    db.commit()
+    return {"success": True}
+
+
+@router.patch("/process/{process_id}", response_model=AgenticProcessOut)
+def rename_process(
+    process_id: int,
+    payload: AgenticProcessUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    process = _get_owned_process(process_id, current_user, db)
+    if payload.name:
+        process.name = payload.name
+    db.commit()
+    db.refresh(process)
+    return AgenticProcessOut(
+        id=process.id, name=process.name, created_at=process.created_at,
+        steps=[AgenticStepOut.model_validate(s) for s in process.steps],
+    )
+
+
+@router.delete("/process/{process_id}")
+def delete_process(process_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    process = _get_owned_process(process_id, current_user, db)
+    db.delete(process)  # cascades to its steps too
+    db.commit()
+    return {"success": True}

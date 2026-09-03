@@ -126,6 +126,14 @@ class AgentRecordCreate(BaseModel):
     workflow_prompt: Optional[str] = None
 
 
+class AgentRecordUpdate(BaseModel):
+    name: Optional[str] = None
+    ai_provider: Optional[str] = None
+    ai_model_version: Optional[str] = None
+    framework: Optional[str] = None
+    workflow_prompt: Optional[str] = None
+
+
 class AgentRecordOut(BaseModel):
     id: int
     name: str
@@ -182,6 +190,10 @@ class McpValidateResponse(BaseModel):
 
 class AgenticProcessCreate(BaseModel):
     name: str
+
+
+class AgenticProcessUpdate(BaseModel):
+    name: Optional[str] = None
 
 
 class AgenticStepOut(BaseModel):

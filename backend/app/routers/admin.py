@@ -20,7 +20,7 @@ def list_users(current_user: User = Depends(require_admin), db: Session = Depend
     result = []
     for u in users:
         agents_count = db.query(AgentRecord).filter(AgentRecord.user_id == u.id).count()
-        processes_count = db.query(AgenticProcess).filter(AgenticProcess.user_id == u.id).count()
+        processes_count = db.query(AgenticProcess).filter(AgenticProcess.user_id == u.id, AgenticProcess.confirmed == True).count()
         result.append(AdminUserOut(
             id=u.id, username=u.username, email=u.email, is_admin=u.is_admin,
             created_at=u.created_at, last_login=u.last_login,

@@ -1,13 +1,13 @@
 from typing import List
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.db_models import User, AgentRecord, AgenticProcess, Feedback
 from app.models.schemas import (
-    ProfileStats, AgentRecordCreate, AgentRecordOut,
+    ProfileStats, AgentRecordCreate, AgentRecordUpdate, AgentRecordOut,
     FeedbackCreate, FeedbackOut, UsageAnalytics, DailyUsagePoint,
 )
 from app.services.auth_service import get_current_user
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/profile", tags=["profile"])
 @router.get("/stats", response_model=ProfileStats)
 def get_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     agents_count = db.query(AgentRecord).filter(AgentRecord.user_id == current_user.id).count()
-    processes_count = db.query(AgenticProcess).filter(AgenticProcess.user_id == current_user.id).count()
+    processes_count = db.query(AgenticProcess).filter(AgenticProcess.user_id == current_user.id, AgenticProcess.confirmed == True).count()
     return ProfileStats(agents_count=agents_count, processes_count=processes_count, reviews_count=0)
 
 
@@ -54,6 +54,41 @@ def list_agents(current_user: User = Depends(get_current_user), db: Session = De
     )
 
 
+def _get_owned_agent(agent_id: int, current_user: User, db: Session) -> AgentRecord:
+    agent = db.query(AgentRecord).filter(AgentRecord.id == agent_id).first()
+    if not agent or agent.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Agent not found.")
+    return agent
+
+
+@router.patch("/agents/{agent_id}", response_model=AgentRecordOut)
+def update_agent(
+    agent_id: int,
+    payload: AgentRecordUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    agent = _get_owned_agent(agent_id, current_user, db)
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(agent, key, value)
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+
+@router.delete("/agents/{agent_id}")
+def delete_agent(
+    agent_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    agent = _get_owned_agent(agent_id, current_user, db)
+    db.delete(agent)
+    db.commit()
+    return {"success": True}
+
+
 @router.post("/feedback", response_model=FeedbackOut)
 def create_feedback(
     payload: FeedbackCreate,
@@ -83,7 +118,7 @@ def usage_analytics(current_user: User = Depends(get_current_user), db: Session 
     since = datetime.utcnow() - timedelta(days=window_days - 1)
 
     agents = db.query(AgentRecord).filter(AgentRecord.user_id == current_user.id, AgentRecord.created_at >= since).all()
-    processes = db.query(AgenticProcess).filter(AgenticProcess.user_id == current_user.id, AgenticProcess.created_at >= since).all()
+    processes = db.query(AgenticProcess).filter(AgenticProcess.user_id == current_user.id, AgenticProcess.confirmed == True, AgenticProcess.created_at >= since).all()
 
     agent_counts = {}
     for a in agents:

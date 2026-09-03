@@ -89,18 +89,6 @@ export default function BuildPage({ onNavigate }) {
     setReviewStatus('idle')
     setCommentTouched(false)
 
-    try {
-      await recordAgentBuilt({
-        name: config.agentName.trim() || 'Untitled Agent',
-        ai_provider: config.ai_provider,
-        ai_model_version: config.ai_model_version,
-        framework: config.framework,
-        workflow_prompt: config.workflow_prompt,
-      })
-    } catch {
-      // non-critical — profile stat just won't increment if this fails
-    }
-
     let workflowPrompt = config.workflow_prompt
     if (feedback) {
       workflowPrompt += `\n\n--- Reviewer feedback on the previous attempt (address this) ---\n${feedback}`
@@ -128,7 +116,20 @@ export default function BuildPage({ onNavigate }) {
     )
   }
 
-  const handleGoodToGo = () => {
+  const handleGoodToGo = async () => {
+    // Only NOW does this agent actually get saved - approving the output is
+    // what "keeping" the agent means, not just clicking Build.
+    try {
+      await recordAgentBuilt({
+        name: config.agentName.trim() || 'Untitled Agent',
+        ai_provider: config.ai_provider,
+        ai_model_version: config.ai_model_version,
+        framework: config.framework,
+        workflow_prompt: config.workflow_prompt,
+      })
+    } catch {
+      // non-critical — profile stat just won't increment if this fails
+    }
     setReviewStatus('approved')
     clearDraft()
   }

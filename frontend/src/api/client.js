@@ -122,6 +122,16 @@ export async function fetchMyAgents() {
   return data
 }
 
+export async function updateAgent(agentId, payload) {
+  const { data } = await api.patch(`/api/profile/agents/${agentId}`, payload)
+  return data
+}
+
+export async function deleteAgent(agentId) {
+  const { data } = await api.delete(`/api/profile/agents/${agentId}`)
+  return data
+}
+
 export async function submitFeedback(message) {
   const { data } = await api.post('/api/profile/feedback', { message })
   return data
@@ -166,6 +176,16 @@ export async function listAgenticProcesses() {
   return data
 }
 
+export async function renameAgenticProcess(processId, name) {
+  const { data } = await api.patch(`/api/agentic/process/${processId}`, { name })
+  return data
+}
+
+export async function deleteAgenticProcess(processId) {
+  const { data } = await api.delete(`/api/agentic/process/${processId}`)
+  return data
+}
+
 export async function runAgenticStep(processId, payload) {
   const { data } = await api.post(`/api/agentic/process/${processId}/steps/run`, payload)
   return data
@@ -173,6 +193,11 @@ export async function runAgenticStep(processId, payload) {
 
 export async function approveAgenticStep(processId, stepIndex) {
   const { data } = await api.post(`/api/agentic/process/${processId}/steps/${stepIndex}/approve`)
+  return data
+}
+
+export async function confirmAgenticProcess(processId) {
+  const { data } = await api.post(`/api/agentic/process/${processId}/confirm`)
   return data
 }
 
