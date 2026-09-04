@@ -4,6 +4,7 @@ import { AgentConfigProvider } from './context/AgentConfigContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider, useTheme } from './context/ThemeContext'
 import { McpConnectionsProvider } from './context/McpConnectionsContext'
+import { AiConnectionsProvider } from './context/AiConnectionsContext'
 import { trackVisit } from './api/client'
 
 import SignIn from './components/auth/SignIn'
@@ -94,7 +95,9 @@ function AuthGate() {
   return (
     <AgentConfigProvider>
       <McpConnectionsProvider>
-        <Console />
+        <AiConnectionsProvider>
+          <Console />
+        </AiConnectionsProvider>
       </McpConnectionsProvider>
     </AgentConfigProvider>
   )

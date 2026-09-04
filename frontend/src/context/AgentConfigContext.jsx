@@ -12,6 +12,7 @@ const initialConfig = {
   framework: '', custom_framework_details: '',
   custom_framework_files: [],
   framework_layout: '', custom_layout_details: '',
+  input_details: '', input_files: [],
   workflow_prompt: '',
 }
 

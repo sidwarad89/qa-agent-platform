@@ -42,6 +42,8 @@ class AgentConfig(BaseModel):
     custom_framework_details: Optional[str] = None
     custom_framework_files: Optional[List[Dict[str, Any]]] = None
     custom_layout_details: Optional[str] = None
+    input_details: Optional[str] = None
+    input_files: Optional[List[Dict[str, Any]]] = None
     workflow_prompt: str
 
 

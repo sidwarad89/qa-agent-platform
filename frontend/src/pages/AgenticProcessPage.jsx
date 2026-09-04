@@ -7,6 +7,7 @@ import { fetchMyAgents, createAgenticProcess, runAgenticStep, approveAgenticStep
 import { getProvider } from '../data/aiModels'
 import { getMcpTool } from '../data/mcpTools'
 import { useMcpConnections } from '../context/McpConnectionsContext'
+import { useAiConnections } from '../context/AiConnectionsContext'
 import { GoldenChainIllustration } from '../components/illustrations/Illustrations'
 
 const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json']
@@ -65,7 +66,8 @@ export default function AgenticProcessPage() {
 
   // chain: [{ agentId, hilEnabled, mcpTool: 'none'|toolId, targetId }]
   const [chain, setChain] = useState([])
-  const [apiKeys, setApiKeys] = useState({}) // { [provider]: key }
+  const { connections: aiConnections, setConnection: setAiConnection } = useAiConnections()
+  const [apiKeys, setApiKeys] = useState({}) // { [provider]: key } - pre-filled from remembered connections below
 
   const [processId, setProcessId] = useState(null)
   const [startError, setStartError] = useState('')
@@ -99,6 +101,23 @@ export default function AgenticProcessPage() {
 
   const usedProviders = [...new Set(chain.map((c) => getAgent(c.agentId)?.ai_provider).filter(Boolean))]
 
+  // Pre-fill any provider we already have a remembered, working key for -
+  // same "connect once, use everywhere" behavior as the Build page.
+  useEffect(() => {
+    setApiKeys((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const p of usedProviders) {
+        if (!next[p] && aiConnections[p]?.api_key) {
+          next[p] = aiConnections[p].api_key
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain.length])
+
   const runStep = async (index, feedback = null) => {
     const item = chain[index]
     const agent = getAgent(item.agentId)
@@ -126,6 +145,13 @@ export default function AgenticProcessPage() {
         mcp_credentials: item.mcpTool !== 'none' ? connections[item.mcpTool] : null,
         mcp_parent_item_id: item.mcpTool !== 'none' ? item.targetId : null,
       })
+
+      // A successful run confirms this key genuinely works - remember it
+      // platform-wide from now on, same as the Build page does.
+      if (apiKeys[agent.ai_provider] && !aiConnections[agent.ai_provider]) {
+        setAiConnection(agent.ai_provider, { model_version: agent.ai_model_version, api_key: apiKeys[agent.ai_provider] })
+      }
+
       setRuntimeSteps((rs) => {
         const copy = [...rs]
         copy[index] = {

@@ -4,6 +4,7 @@
 
 html {
   font-family: 'Inter', system-ui, sans-serif;
+  font-size: 17.5px; /* bumped from the browser default 16px - scales every Tailwind text-* size up proportionally */
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }

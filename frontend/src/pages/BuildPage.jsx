@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   FiCpu, FiCode, FiLayers, FiGrid, FiPaperclip, FiPlayCircle, FiShare2,
-  FiCheckCircle, FiRotateCcw,
+  FiCheckCircle, FiRotateCcw, FiX, FiFileText,
 } from 'react-icons/fi'
 import { useAgentConfig } from '../context/AgentConfigContext'
+import { useAiConnections } from '../context/AiConnectionsContext'
 import { validateModelToken, buildAgent, recordAgentBuilt } from '../api/client'
 
 import { AI_MODELS, getProvider } from '../data/aiModels'
@@ -40,10 +41,25 @@ const PLACEHOLDER = `e.g. "Pull user story QA-12 from Jira (connected under MCP 
 
 export default function BuildPage({ onNavigate }) {
   const { config, updateConfig, clearDraft } = useAgentConfig()
+  const { connections: aiConnections, setConnection: setAiConnection, removeConnection: removeAiConnection } = useAiConnections()
+  const [manualOverride, setManualOverride] = useState(false)
 
   const provider = getProvider(config.ai_provider)
   const selectedVersion = provider?.versions.find((v) => v.id === config.ai_model_version)
   const framework = getFramework(config.framework)
+  const savedConnection = config.ai_provider ? aiConnections[config.ai_provider] : null
+  const isConnected = !!config.ai_validated && !!savedConnection && !manualOverride
+
+  // Auto-reconnect: whenever a provider with a remembered, validated key is
+  // selected, restore it instantly instead of asking the user to type it in
+  // again - this is what makes picking a provider you've used before instant.
+  useEffect(() => {
+    if (config.ai_provider && aiConnections[config.ai_provider] && !config.ai_validated && !manualOverride) {
+      const saved = aiConnections[config.ai_provider]
+      updateConfig({ ai_model_version: saved.model_version, ai_api_key: saved.api_key, ai_validated: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.ai_provider])
 
   // --- AI Engine ---
   const [aiStatus, setAiStatus] = useState('idle')
@@ -59,10 +75,22 @@ export default function BuildPage({ onNavigate }) {
       setAiStatus(result.valid ? 'success' : 'error')
       setAiMessage(result.message)
       updateConfig({ ai_validated: result.valid })
+      if (result.valid) {
+        // Remembered from now on - this is what "connect once, use everywhere" means.
+        setAiConnection(config.ai_provider, { model_version: config.ai_model_version, api_key: config.ai_api_key })
+        setManualOverride(false)
+      }
     } catch {
       setAiStatus('error')
       setAiMessage('Could not reach backend — is it running?')
     }
+  }
+
+  const useADifferentKey = () => {
+    setManualOverride(true)
+    updateConfig({ ai_api_key: '', ai_validated: false })
+    setAiStatus('idle')
+    setAiMessage('')
   }
 
   // --- Build agent ---
@@ -92,6 +120,21 @@ export default function BuildPage({ onNavigate }) {
     let workflowPrompt = config.workflow_prompt
     if (feedback) {
       workflowPrompt += `\n\n--- Reviewer feedback on the previous attempt (address this) ---\n${feedback}`
+    }
+    if (config.input_details?.trim()) {
+      workflowPrompt += `\n\n--- Reference info provided by the user (e.g. a Jira ID, ticket URL, or note) ---\n${config.input_details}`
+    }
+    if ((config.input_files || []).length > 0) {
+      const readable = config.input_files.filter((f) => f.isTextEditable && f.content)
+      const unreadable = config.input_files.filter((f) => !f.isTextEditable || !f.content)
+      if (readable.length > 0) {
+        workflowPrompt += `\n\n--- Input document(s) provided by the user ---\n` +
+          readable.map((f) => `[${f.name}]\n${f.content}`).join('\n\n')
+      }
+      if (unreadable.length > 0) {
+        workflowPrompt += `\n\n--- Additional input file(s) attached (binary, name only) ---\n` +
+          unreadable.map((f) => f.name).join(', ')
+      }
     }
 
     const payload = {
@@ -191,16 +234,35 @@ export default function BuildPage({ onNavigate }) {
 
             {provider && (
               <div className="flex flex-col gap-2">
-                <select
-                  className="border border-slate-300 rounded-lg px-3 py-2 w-full sm:w-80"
-                  value={config.ai_model_version}
-                  onChange={(e) => updateConfig({ ai_model_version: e.target.value, ai_validated: false })}
-                >
-                  <option value="">Select model version</option>
-                  {provider.versions.map((v) => (
-                    <option key={v.id} value={v.id}>{v.label}{v.free ? ' — Free tier available' : ''}</option>
-                  ))}
-                </select>
+                {isConnected ? (
+                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+                    <FiCheckCircle className="text-emerald-600 shrink-0" />
+                    <div className="flex-1 text-sm text-emerald-700">
+                      Connected — <span className="font-medium">{config.ai_model_version}</span>
+                    </div>
+                    <button onClick={useADifferentKey} className="text-xs text-emerald-700 hover:text-emerald-900 flex items-center gap-1 shrink-0">
+                      Use a different key
+                    </button>
+                    <button
+                      onClick={() => { removeAiConnection(config.ai_provider); updateConfig({ ai_api_key: '', ai_validated: false }) }}
+                      className="text-emerald-600 hover:text-red-500 shrink-0"
+                      title="Disconnect"
+                    >
+                      <FiX size={15} />
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    className="border border-slate-300 rounded-lg px-3 py-2 w-full sm:w-80"
+                    value={config.ai_model_version}
+                    onChange={(e) => updateConfig({ ai_model_version: e.target.value, ai_validated: false })}
+                  >
+                    <option value="">Select model version</option>
+                    {provider.versions.map((v) => (
+                      <option key={v.id} value={v.id}>{v.label}{v.free ? ' — Free tier available' : ''}</option>
+                    ))}
+                  </select>
+                )}
 
                 {selectedVersion && (
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -222,7 +284,7 @@ export default function BuildPage({ onNavigate }) {
               </div>
             )}
 
-            {provider && config.ai_model_version && (
+            {provider && config.ai_model_version && !isConnected && (
               <div className="flex flex-col gap-3">
                 <ApiKeyHelp
                   steps={provider.steps}
@@ -312,8 +374,19 @@ export default function BuildPage({ onNavigate }) {
         </SectionCard>
       </div>
 
+      <SectionCard index={5} title="Provide Input (optional)" subtitle="Attach reference documents and/or add a quick note like a Jira ID" accent="#0891b2" icon={FiFileText}>
+        <div className="flex flex-col gap-4">
+          <FileManager
+            files={config.input_files}
+            onFilesChange={(files) => updateConfig({ input_files: files })}
+            text={config.input_details}
+            onTextChange={(t) => updateConfig({ input_details: t })}
+          />
+        </div>
+      </SectionCard>
+
       {config.framework === 'Customize' && (
-        <SectionCard index={5} title="Customize Framework Reference Files" subtitle="Upload docs, PDFs, spreadsheets, or plain text describing your framework — edit, remove, or re-upload anytime" accent="#ec4899" icon={FiPaperclip}>
+        <SectionCard index={6} title="Customize Framework Reference Files" subtitle="Upload docs, PDFs, spreadsheets, or plain text describing your framework — edit, remove, or re-upload anytime" accent="#ec4899" icon={FiPaperclip}>
           <FileManager
             files={config.custom_framework_files}
             onFilesChange={(files) => updateConfig({ custom_framework_files: files })}
@@ -323,7 +396,7 @@ export default function BuildPage({ onNavigate }) {
         </SectionCard>
       )}
 
-      <SectionCard index={6} title="Describe the Workflow & Build" subtitle="Tell the agent what to do end-to-end, then generate it" accent="#ef4444" icon={FiPlayCircle}>
+      <SectionCard index={7} title="Describe the Workflow & Build" subtitle="Tell the agent what to do end-to-end, then generate it" accent="#ef4444" icon={FiPlayCircle}>
         <div className="flex flex-col gap-4">
           <textarea
             className="border border-slate-300 rounded-lg px-3 py-2 w-full h-36"

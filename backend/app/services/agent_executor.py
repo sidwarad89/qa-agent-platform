@@ -65,8 +65,17 @@ async def run_agent(cfg: AgentConfig):
     ai_client = _ai_client_for(cfg.ai_provider)
     context = {}  # carries output of one step into the next
 
+    # Fold in any extra input the user provided (free-text details + uploaded
+    # documents) so the agent actually has that context to work with.
+    effective_prompt = cfg.workflow_prompt
+    if cfg.input_details:
+        effective_prompt += f"\n\n--- Additional input provided by the user ---\n{cfg.input_details}"
+    for f in (cfg.input_files or []):
+        if f.get("content"):
+            effective_prompt += f"\n\n--- Content of uploaded file '{f.get('name', 'file')}' ---\n{f['content'][:8000]}"
+
     yield {"run_id": run_id, "step_name": "parse_workflow", "status": "running", "detail": "Parsing your workflow description..."}
-    steps = parse_workflow(cfg.ai_provider, cfg.ai_model_version, cfg.ai_api_key, cfg.workflow_prompt)
+    steps = parse_workflow(cfg.ai_provider, cfg.ai_model_version, cfg.ai_api_key, effective_prompt)
     if not steps:
         yield {"run_id": run_id, "step_name": "parse_workflow", "status": "error",
                "detail": "Could not map your prompt to any known automation steps. Try rephrasing."}
