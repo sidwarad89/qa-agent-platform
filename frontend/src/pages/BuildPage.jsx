@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   FiCpu, FiCode, FiLayers, FiGrid, FiPaperclip, FiPlayCircle, FiShare2,
-  FiCheckCircle, FiRotateCcw, FiX, FiFileText, FiPause, FiEdit3,
+  FiCheckCircle, FiRotateCcw, FiX, FiFileText, FiPause, FiEdit3, FiPlus,
 } from 'react-icons/fi'
 import { useAgentConfig } from '../context/AgentConfigContext'
 import { useAiConnections } from '../context/AiConnectionsContext'
