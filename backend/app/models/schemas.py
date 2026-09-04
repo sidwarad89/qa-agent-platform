@@ -51,6 +51,10 @@ class AgentConfig(BaseModel):
     custom_layout_details: Optional[str] = None
     input_details: Optional[str] = None
     input_files: Optional[List[Dict[str, Any]]] = None
+    # Explicit reviewer feedback from a Re-Execute click - kept separate from
+    # workflow_prompt so it can be handed directly to the AI generation steps
+    # as real instructions, not just folded into step-selection text.
+    feedback: Optional[str] = None
     workflow_prompt: str
 
 

@@ -37,6 +37,7 @@ def generate_scripts(
     framework: str,
     layout: str,
     test_cases: list[str],
+    feedback: str = None,
 ) -> str:
     client = _client_for(provider)
     system = (
@@ -50,4 +51,6 @@ def generate_scripts(
     prompt = "Generate automation scripts for these test cases:\n\n" + "\n".join(
         f"- {tc}" for tc in test_cases
     )
+    if feedback:
+        prompt += f"\n\nIMPORTANT - the reviewer left this feedback on the previous attempt, address it directly:\n{feedback}"
     return client.generate(api_key=api_key, model_version=model_version, system=system, prompt=prompt, max_tokens=4000)

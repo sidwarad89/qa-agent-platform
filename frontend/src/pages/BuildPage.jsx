@@ -251,6 +251,7 @@ export default function BuildPage({ onNavigate }) {
       })),
       custom_layout_details: config.custom_layout_details,
       workflow_prompt: workflowPrompt,
+      feedback: feedback || null,
       input_sources: resolvedInputSources,
       output_targets: resolvedOutputTargets,
     }

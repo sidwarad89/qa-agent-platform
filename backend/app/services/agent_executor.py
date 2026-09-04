@@ -100,6 +100,8 @@ async def run_agent(cfg: AgentConfig):
 
             elif step == "generate_test_scenarios":
                 summary = context.get("input_item_summary", "")[:3000]
+                if cfg.feedback:
+                    summary += f"\n\nIMPORTANT - the reviewer left this feedback on the previous attempt, address it directly:\n{cfg.feedback}"
                 scenarios_text = ai_client.generate(
                     api_key=cfg.ai_api_key, model_version=cfg.ai_model_version,
                     system="You are a QA lead. Generate 10-20 concise test scenarios (one per line) for the given user story.",
@@ -145,6 +147,8 @@ async def run_agent(cfg: AgentConfig):
 
             elif step == "generate_test_cases":
                 scenarios_text = "\n".join(context.get("scenarios", []))
+                if cfg.feedback:
+                    scenarios_text += f"\n\nIMPORTANT - the reviewer left this feedback on the previous attempt, address it directly:\n{cfg.feedback}"
                 cases_text = ai_client.generate(
                     api_key=cfg.ai_api_key, model_version=cfg.ai_model_version,
                     system=("You are a QA engineer. From these scenarios, generate 5-10 detailed test cases "
@@ -204,7 +208,7 @@ async def run_agent(cfg: AgentConfig):
                 scripts = code_generator.generate_scripts(
                     provider=cfg.ai_provider, model_version=cfg.ai_model_version, api_key=cfg.ai_api_key,
                     language=cfg.language, framework=cfg.framework, layout=cfg.framework_layout,
-                    test_cases=context.get("test_cases", []),
+                    test_cases=context.get("test_cases", []), feedback=cfg.feedback,
                 )
                 context["scripts"] = scripts
                 yield {"run_id": run_id, "step_name": step, "status": "success",
