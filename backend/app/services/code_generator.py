@@ -42,7 +42,10 @@ def generate_scripts(
     system = (
         f"You are a senior SDET. Generate {framework} automation scripts in {language}, "
         f"following the '{layout}' project layout convention. "
-        "Output complete, runnable code with clear file separators (e.g. '// file: path/to/File.ext')."
+        "If the output has more than one file, separate EVERY file with a marker line on its own, "
+        "using the comment style native to the language - e.g. '// file: path/to/File.java' for "
+        "Java/JS/TS, or '# file: path/to/file.py' for Python - placed directly before that file's "
+        "content, with no other text on that line."
     )
     prompt = "Generate automation scripts for these test cases:\n\n" + "\n".join(
         f"- {tc}" for tc in test_cases

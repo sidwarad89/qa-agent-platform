@@ -26,6 +26,11 @@ class JiraConnector:
             raise RuntimeError(f"Jira GET issue failed (HTTP {resp.status_code}): {resp.text[:500]}")
         return resp.json()
 
+    def delete_issue(self, issue_id: str) -> None:
+        resp = httpx.delete(f"{self.base_url}/rest/api/3/issue/{issue_id}", auth=self.auth, timeout=15)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Jira DELETE issue {issue_id} failed (HTTP {resp.status_code}): {resp.text[:500]}")
+
     def create_subtask(self, parent_issue_id: str, project_key: str, summary: str, description: str) -> dict:
         def _attempt(issuetype_name: str):
             payload = {

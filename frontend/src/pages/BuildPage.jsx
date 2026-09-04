@@ -168,18 +168,35 @@ export default function BuildPage({ onNavigate }) {
     let effectiveOutputTool = config.output_tool
     if (!effectiveOutputTool) {
       const promptLower = config.workflow_prompt.toLowerCase()
-      if (promptLower.includes('github') && mcpConnections.github) effectiveOutputTool = 'github'
-      else if (promptLower.includes('testrail') && mcpConnections.testrail && config.output_section_id) effectiveOutputTool = 'testrail'
-      else if (promptLower.includes('jira') && mcpConnections.jira) effectiveOutputTool = 'jira'
+      const mentionMap = [
+        ['github', 'github'],
+        ['gitlab', 'gitlab'],
+        ['azure devops', 'ado'], ['ado', 'ado'],
+        ['testrail', 'testrail'],
+        ['xray', 'xray'],
+        ['zephyr', 'zephyr'],
+        ['codecommit', 'aws'], ['aws', 'aws'],
+        ['jira', 'jira'],
+      ]
+      for (const [keyword, toolId] of mentionMap) {
+        if (promptLower.includes(keyword) && mcpConnections[toolId]) {
+          // TestRail needs a section id we can't reliably extract from prose -
+          // only auto-detect it if one was already provided in the field above.
+          if (toolId === 'testrail' && !config.output_section_id) continue
+          effectiveOutputTool = toolId
+          break
+        }
+      }
     }
 
     let outputCredentials = null
-    if (effectiveOutputTool === 'testrail' && mcpConnections.testrail) {
-      outputCredentials = { ...mcpConnections.testrail, section_id: config.output_section_id }
-    } else if (effectiveOutputTool === 'github' && mcpConnections.github) {
-      outputCredentials = { ...mcpConnections.github }
-    } else if (effectiveOutputTool === 'jira' && mcpConnections.jira) {
-      outputCredentials = { ...mcpConnections.jira, item_id: config.output_section_id || effectiveInputItemId }
+    if (effectiveOutputTool && mcpConnections[effectiveOutputTool]) {
+      outputCredentials = { ...mcpConnections[effectiveOutputTool] }
+      if (effectiveOutputTool === 'testrail') {
+        outputCredentials.section_id = config.output_section_id
+      } else if (effectiveOutputTool === 'jira') {
+        outputCredentials.item_id = config.output_section_id || effectiveInputItemId
+      }
     }
 
     const payload = {
@@ -242,11 +259,19 @@ export default function BuildPage({ onNavigate }) {
   }
 
   const handleReExecute = () => {
-    const combined = [reviewFeedback, reviewFileNote].filter(Boolean).join('\n')
+    // Forward the previous run's own log as context - this is what lets a
+    // follow-up like "delete the subtask you just attached" actually find
+    // the real id (e.g. "Scenarios attached as SCRUM-5") to act on, instead
+    // of the new run starting with zero memory of what the last one did.
+    const previousLog = events.map((e) => `[${e.step_name}] ${e.detail}`).join('\n')
+    const combined = [reviewFeedback, reviewFileNote].filter(Boolean).join('\n') || 'Please regenerate with more care and precision.'
+    const feedbackWithContext = previousLog
+      ? `${combined}\n\n--- Previous run's log (for reference - e.g. any ids it mentions) ---\n${previousLog}`
+      : combined
     setReviewFeedback('')
     setReviewFileNote('')
     setReviewFileName('')
-    handleBuild(combined || 'Please regenerate with more care and precision.')
+    handleBuild(feedbackWithContext)
   }
 
   const handleFileAttach = async (file) => {
@@ -455,45 +480,51 @@ export default function BuildPage({ onNavigate }) {
               onChange={(e) => updateConfig({ input_tool: e.target.value })}
             >
               <option value="">Don't fetch from a tool</option>
-              {['jira', 'ado'].filter((t) => mcpConnections[t]).map((t) => (
+              {['jira', 'ado', 'gitlab', 'testrail'].filter((t) => mcpConnections[t]).map((t) => (
                 <option key={t} value={t}>{getMcpTool(t)?.label || t}</option>
               ))}
             </select>
-            {['jira', 'ado'].filter((t) => !mcpConnections[t]).length === 2 && (
+            {['jira', 'ado', 'gitlab', 'testrail'].every((t) => !mcpConnections[t]) && (
               <p className="text-xs text-slate-400">
-                Connect Jira or ADO under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to fetch a real issue/work item here.
+                Connect Jira, ADO, GitLab, or TestRail under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to fetch a real item here.
               </p>
             )}
             {config.input_tool && (
               <input
                 className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
-                placeholder={config.input_tool === 'jira' ? 'Jira issue key, e.g. QA-42' : 'ADO work item ID'}
+                placeholder={
+                  config.input_tool === 'jira' ? 'Jira issue key, e.g. QA-42'
+                  : config.input_tool === 'ado' ? 'ADO work item ID'
+                  : config.input_tool === 'gitlab' ? 'GitLab issue IID'
+                  : 'TestRail case ID'
+                }
                 value={config.input_item_id}
                 onChange={(e) => updateConfig({ input_item_id: e.target.value })}
               />
             )}
             {config.input_tool && (
               <p className="text-xs text-slate-400">
-                This fetches the real item's content when the agent runs, and — if it's a Jira issue — can attach generated scenarios back to it as a subtask.
+                This fetches the real item's content when the agent runs
+                {config.input_tool === 'jira' ? ', and can attach generated scenarios back to it as a subtask.' : '.'}
               </p>
             )}
           </div>
 
           <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
-            <p className="text-sm font-medium text-slate-600">Push generated test cases to TestRail (optional)</p>
+            <p className="text-sm font-medium text-slate-600">Push generated test cases to a connected tool (optional)</p>
             <select
               className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
               value={config.output_tool}
               onChange={(e) => updateConfig({ output_tool: e.target.value })}
             >
               <option value="">Don't push anywhere (or auto-detect from prompt)</option>
-              {mcpConnections.testrail && <option value="testrail">TestRail</option>}
-              {mcpConnections.github && <option value="github">GitHub</option>}
-              {mcpConnections.jira && <option value="jira">Jira (as subtasks)</option>}
+              {['testrail', 'github', 'jira', 'gitlab', 'ado', 'xray', 'zephyr', 'aws'].filter((t) => mcpConnections[t]).map((t) => (
+                <option key={t} value={t}>{getMcpTool(t)?.label || t}</option>
+              ))}
             </select>
-            {!mcpConnections.testrail && !mcpConnections.github && !mcpConnections.jira && (
+            {['testrail', 'github', 'jira', 'gitlab', 'ado', 'xray', 'zephyr', 'aws'].every((t) => !mcpConnections[t]) && (
               <p className="text-xs text-slate-400">
-                Connect TestRail, GitHub, or Jira under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to push real test cases.
+                Connect any tool under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to push real test cases.
               </p>
             )}
             {config.output_tool === 'testrail' && (

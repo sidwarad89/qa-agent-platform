@@ -13,8 +13,11 @@ KNOWN_STEPS = [
     "generate_test_scenarios",
     "attach_scenarios_to_input", # write scenarios back as a subtask/comment
     "generate_test_cases",
-    "push_test_cases_to_output", # TestRail / Jira / ADO / GitHub
+    "push_test_cases_to_output", # any connected tool
+    "fetch_test_cases_from_output", # read previously-pushed test cases back (currently: GitHub)
     "generate_automation_scripts",
+    "push_scripts_to_new_branch", # commit generated scripts to a new branch (GitHub)
+    "delete_created_items",    # remove something this agent (or a previous run of it) created
     "analyze_logs_for_bugs",     # bug-finding use case
     "generate_bug_report",
 ]
@@ -22,6 +25,20 @@ KNOWN_STEPS = [
 PARSE_SYSTEM_PROMPT = f"""You convert a QA engineer's plain-English automation request into an
 ordered JSON list of step identifiers, using ONLY this fixed vocabulary:
 {json.dumps(KNOWN_STEPS)}
+
+Guidance on when to use which step:
+- "fetch_input_item" + "generate_test_scenarios" + "attach_scenarios_to_input": pulling a user
+  story/work item and writing generated scenarios back to it as a subtask.
+- "generate_test_cases" + "push_test_cases_to_output": turning scenarios into test cases and
+  pushing them to whichever tool is connected as the output.
+- "fetch_test_cases_from_output": use this when the user wants test cases READ BACK from a tool
+  they were previously pushed to (e.g. "take those test cases from GitHub..."), as opposed to
+  freshly generating them in the same run.
+- "generate_automation_scripts" + "push_scripts_to_new_branch": generating code from test cases
+  and committing it to a new branch, as opposed to the main branch.
+- "delete_created_items": use this whenever the user asks to delete, remove, undo, or clean up
+  something that was created by this agent (a subtask, a pushed test case, a work item, etc.),
+  whether from earlier in this same request or from a previous run being referenced.
 
 Rules:
 - Return ONLY a JSON array of strings, nothing else.
