@@ -134,7 +134,29 @@ async def run_agent(cfg: AgentConfig):
                     for tc in context.get("test_cases", []):
                         connector.add_case(section_id=section_id, title=tc[:250], steps=tc)
                         pushed += 1
-                yield {"run_id": run_id, "step_name": step, "status": "success", "detail": f"Pushed {pushed} test cases."}
+
+                elif cfg.output_tool == "jira":
+                    # One subtask per test case, same pattern TestRail uses -
+                    # each stays individually traceable in Jira.
+                    parent = cfg.output_credentials.get("item_id") or cfg.input_credentials.get("item_id", "")
+                    project_key = cfg.output_credentials.get("project_key") or (parent.split("-")[0] if "-" in parent else "")
+                    for tc in context.get("test_cases", []):
+                        connector.create_subtask(
+                            parent_issue_id=parent, project_key=project_key,
+                            summary=tc[:250], description=tc,
+                        )
+                        pushed += 1
+
+                elif cfg.output_tool == "github":
+                    import base64, datetime
+                    body = "\n\n".join(f"## Test Case {i+1}\n{tc}" for i, tc in enumerate(context.get("test_cases", [])))
+                    content_b64 = base64.b64encode(body.encode()).decode()
+                    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+                    path = f"generated-test-cases/test-cases-{timestamp}.md"
+                    connector.create_file(path=path, content_b64=content_b64, message=f"Add generated test cases ({timestamp})")
+                    pushed = len(context.get("test_cases", []))
+
+                yield {"run_id": run_id, "step_name": step, "status": "success", "detail": f"Pushed {pushed} test cases to {cfg.output_tool}."}
 
             elif step == "generate_automation_scripts":
                 scripts = code_generator.generate_scripts(

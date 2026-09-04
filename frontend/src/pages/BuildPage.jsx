@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import {
   FiCpu, FiCode, FiLayers, FiGrid, FiPaperclip, FiPlayCircle, FiShare2,
-  FiCheckCircle, FiRotateCcw, FiX, FiFileText,
+  FiCheckCircle, FiRotateCcw, FiX, FiFileText, FiPause, FiEdit3,
 } from 'react-icons/fi'
 import { useAgentConfig } from '../context/AgentConfigContext'
 import { useAiConnections } from '../context/AiConnectionsContext'
+import { useMcpConnections } from '../context/McpConnectionsContext'
+import { getMcpTool } from '../data/mcpTools'
 import { validateModelToken, buildAgent, recordAgentBuilt } from '../api/client'
 
 import { AI_MODELS, getProvider } from '../data/aiModels'
@@ -42,6 +44,7 @@ const PLACEHOLDER = `e.g. "Pull user story QA-12 from Jira (connected under MCP 
 export default function BuildPage({ onNavigate }) {
   const { config, updateConfig, clearDraft } = useAgentConfig()
   const { connections: aiConnections, setConnection: setAiConnection, removeConnection: removeAiConnection } = useAiConnections()
+  const { connections: mcpConnections } = useMcpConnections()
   const [manualOverride, setManualOverride] = useState(false)
 
   const provider = getProvider(config.ai_provider)
@@ -96,6 +99,8 @@ export default function BuildPage({ onNavigate }) {
   // --- Build agent ---
   const [events, setEvents] = useState([])
   const [running, setRunning] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const abortControllerRef = React.useRef(null)
 
   // Human-in-the-loop review of this agent's own output, same pattern as Agentic Process.
   const [reviewStatus, setReviewStatus] = useState('idle') // idle | awaiting_review | approved
@@ -137,6 +142,46 @@ export default function BuildPage({ onNavigate }) {
       }
     }
 
+    // Real MCP tool wiring: build actual credentials from the shared, already-
+    // validated connections, plus this run's specific target (item/section id).
+    // If the user didn't explicitly pick a tool from the dropdown, try to
+    // detect one straight from what they described in the prompt - this is
+    // what makes "just describe it in plain English" actually work end-to-end.
+    let effectiveInputTool = config.input_tool
+    let effectiveInputItemId = config.input_item_id
+    if (!effectiveInputTool) {
+      const jiraMatch = config.workflow_prompt.match(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/)
+      if (jiraMatch && mcpConnections.jira) {
+        effectiveInputTool = 'jira'
+        effectiveInputItemId = jiraMatch[0]
+      }
+    }
+
+    let inputCredentials = null
+    if (effectiveInputTool && mcpConnections[effectiveInputTool]) {
+      inputCredentials = { ...mcpConnections[effectiveInputTool], item_id: effectiveInputItemId }
+      if (effectiveInputTool === 'jira' && effectiveInputItemId?.includes('-')) {
+        inputCredentials.project_key = effectiveInputItemId.split('-')[0]
+      }
+    }
+
+    let effectiveOutputTool = config.output_tool
+    if (!effectiveOutputTool) {
+      const promptLower = config.workflow_prompt.toLowerCase()
+      if (promptLower.includes('github') && mcpConnections.github) effectiveOutputTool = 'github'
+      else if (promptLower.includes('testrail') && mcpConnections.testrail && config.output_section_id) effectiveOutputTool = 'testrail'
+      else if (promptLower.includes('jira') && mcpConnections.jira) effectiveOutputTool = 'jira'
+    }
+
+    let outputCredentials = null
+    if (effectiveOutputTool === 'testrail' && mcpConnections.testrail) {
+      outputCredentials = { ...mcpConnections.testrail, section_id: config.output_section_id }
+    } else if (effectiveOutputTool === 'github' && mcpConnections.github) {
+      outputCredentials = { ...mcpConnections.github }
+    } else if (effectiveOutputTool === 'jira' && mcpConnections.jira) {
+      outputCredentials = { ...mcpConnections.jira, item_id: config.output_section_id || effectiveInputItemId }
+    }
+
     const payload = {
       ai_provider: config.ai_provider,
       ai_model_version: config.ai_model_version,
@@ -150,13 +195,32 @@ export default function BuildPage({ onNavigate }) {
       })),
       custom_layout_details: config.custom_layout_details,
       workflow_prompt: workflowPrompt,
+      input_tool: inputCredentials ? effectiveInputTool : null,
+      input_credentials: inputCredentials,
+      output_tool: outputCredentials ? effectiveOutputTool : null,
+      output_credentials: outputCredentials,
     }
+    abortControllerRef.current = new AbortController()
+    setPaused(false)
     buildAgent(
       payload,
       (event) => setEvents((prev) => [...prev, event]),
       () => { setRunning(false); setReviewStatus('awaiting_review') },
       () => setRunning(false),
+      abortControllerRef.current.signal,
     )
+  }
+
+  const handlePause = () => {
+    abortControllerRef.current?.abort()
+    setRunning(false)
+    setPaused(true)
+    setEvents((prev) => [...prev, { step_name: 'paused', status: 'error', detail: 'Paused by you. Edit anything above, then click Resume to restart with your changes.' }])
+  }
+
+  const handleResume = () => {
+    setPaused(false)
+    handleBuild()
   }
 
   const handleGoodToGo = async () => {
@@ -382,6 +446,76 @@ export default function BuildPage({ onNavigate }) {
             text={config.input_details}
             onTextChange={(t) => updateConfig({ input_details: t })}
           />
+
+          <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
+            <p className="text-sm font-medium text-slate-600">Or fetch real data from a connected tool</p>
+            <select
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
+              value={config.input_tool}
+              onChange={(e) => updateConfig({ input_tool: e.target.value })}
+            >
+              <option value="">Don't fetch from a tool</option>
+              {['jira', 'ado'].filter((t) => mcpConnections[t]).map((t) => (
+                <option key={t} value={t}>{getMcpTool(t)?.label || t}</option>
+              ))}
+            </select>
+            {['jira', 'ado'].filter((t) => !mcpConnections[t]).length === 2 && (
+              <p className="text-xs text-slate-400">
+                Connect Jira or ADO under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to fetch a real issue/work item here.
+              </p>
+            )}
+            {config.input_tool && (
+              <input
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
+                placeholder={config.input_tool === 'jira' ? 'Jira issue key, e.g. QA-42' : 'ADO work item ID'}
+                value={config.input_item_id}
+                onChange={(e) => updateConfig({ input_item_id: e.target.value })}
+              />
+            )}
+            {config.input_tool && (
+              <p className="text-xs text-slate-400">
+                This fetches the real item's content when the agent runs, and — if it's a Jira issue — can attach generated scenarios back to it as a subtask.
+              </p>
+            )}
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
+            <p className="text-sm font-medium text-slate-600">Push generated test cases to TestRail (optional)</p>
+            <select
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
+              value={config.output_tool}
+              onChange={(e) => updateConfig({ output_tool: e.target.value })}
+            >
+              <option value="">Don't push anywhere (or auto-detect from prompt)</option>
+              {mcpConnections.testrail && <option value="testrail">TestRail</option>}
+              {mcpConnections.github && <option value="github">GitHub</option>}
+              {mcpConnections.jira && <option value="jira">Jira (as subtasks)</option>}
+            </select>
+            {!mcpConnections.testrail && !mcpConnections.github && !mcpConnections.jira && (
+              <p className="text-xs text-slate-400">
+                Connect TestRail, GitHub, or Jira under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to push real test cases.
+              </p>
+            )}
+            {config.output_tool === 'testrail' && (
+              <input
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
+                placeholder="TestRail Section ID"
+                value={config.output_section_id}
+                onChange={(e) => updateConfig({ output_section_id: e.target.value })}
+              />
+            )}
+            {config.output_tool === 'jira' && (
+              <input
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
+                placeholder="Parent Issue Key (optional, e.g. QA-42)"
+                value={config.output_section_id}
+                onChange={(e) => updateConfig({ output_section_id: e.target.value })}
+              />
+            )}
+            <p className="text-xs text-slate-400">
+              Tip: you don't have to pick anything here — mentioning "GitHub" or a Jira ID like QA-42 directly in your workflow prompt below will auto-connect to that tool if it's already connected.
+            </p>
+          </div>
         </div>
       </SectionCard>
 
@@ -411,13 +545,38 @@ export default function BuildPage({ onNavigate }) {
             </p>
           )}
 
-          <button
-            onClick={handleBuild}
-            disabled={!allReady || running}
-            className="self-start px-6 py-3 bg-step7 text-white rounded-lg font-semibold disabled:opacity-40"
-          >
-            {running ? 'Building Agent...' : 'Build Agent'}
-          </button>
+          <div className="flex gap-3 items-center">
+            <button
+              onClick={() => handleBuild()}
+              disabled={!allReady || running}
+              className="px-6 py-3 bg-step7 text-white rounded-lg font-semibold disabled:opacity-40"
+            >
+              {running ? 'Building Agent...' : paused ? 'Restart' : 'Build Agent'}
+            </button>
+
+            {running && (
+              <button
+                onClick={handlePause}
+                className="px-5 py-3 bg-amber-100 text-amber-700 rounded-lg font-semibold flex items-center gap-2"
+              >
+                <FiPause /> Pause
+              </button>
+            )}
+
+            {paused && (
+              <>
+                <span className="text-sm text-slate-500 flex items-center gap-1.5">
+                  <FiEdit3 /> Edit anything above, then:
+                </span>
+                <button
+                  onClick={handleResume}
+                  className="px-5 py-3 bg-emerald-600 text-white rounded-lg font-semibold flex items-center gap-2"
+                >
+                  <FiPlayCircle /> Resume
+                </button>
+              </>
+            )}
+          </div>
 
           <ExecutionLog events={events} />
 

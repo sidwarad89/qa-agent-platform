@@ -48,11 +48,12 @@ export async function validateOutputTool(payload) {
 }
 
 /** Streams agent run progress via SSE, invoking onEvent for each step result. */
-export function buildAgent(config, onEvent, onDone, onError) {
+export function buildAgent(config, onEvent, onDone, onError, signal) {
   fetch(`${BASE_URL}/api/agent/build`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
+    signal,
   }).then(async (res) => {
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
@@ -71,7 +72,10 @@ export function buildAgent(config, onEvent, onDone, onError) {
         }
       }
     }
-  }).catch((err) => onError?.(err))
+  }).catch((err) => {
+    if (err.name === 'AbortError') return // intentionally paused, not a real failure
+    onError?.(err)
+  })
 }
 
 // ---- Auth -----------------------------------------------------------------
