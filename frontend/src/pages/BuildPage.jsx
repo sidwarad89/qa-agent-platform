@@ -204,7 +204,7 @@ export default function BuildPage({ onNavigate }) {
     const resolvedInputSources = (config.input_sources || [])
       .filter((s) => s.tool && mcpConnections[s.tool])
       .map((s) => {
-        const creds = { ...mcpConnections[s.tool], item_id: s.item_id, attach_as: s.attach_as || 'subtask' }
+        const creds = { tool: s.tool, ...mcpConnections[s.tool], item_id: s.item_id, attach_as: s.attach_as || 'subtask' }
         if (s.tool === 'jira' && s.item_id?.includes('-')) creds.project_key = s.item_id.split('-')[0]
         return creds
       })
@@ -212,13 +212,13 @@ export default function BuildPage({ onNavigate }) {
     if (resolvedInputSources.length === 0) {
       const jiraMatch = config.workflow_prompt.match(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/)
       if (jiraMatch && mcpConnections.jira) {
-        resolvedInputSources.push({ ...mcpConnections.jira, item_id: jiraMatch[0], project_key: jiraMatch[0].split('-')[0], attach_as: 'subtask' })
+        resolvedInputSources.push({ tool: 'jira', ...mcpConnections.jira, item_id: jiraMatch[0], project_key: jiraMatch[0].split('-')[0], attach_as: 'subtask' })
       }
     }
 
     const resolvedOutputTargets = (config.output_targets || [])
       .filter((t) => t.tool && mcpConnections[t.tool])
-      .map((t) => ({ ...mcpConnections[t.tool], target_type: t.target_type, target_id: t.target_id }))
+      .map((t) => ({ tool: t.tool, ...mcpConnections[t.tool], target_type: t.target_type, target_id: t.target_id }))
 
     if (resolvedOutputTargets.length === 0) {
       const promptLower = config.workflow_prompt.toLowerCase()
@@ -230,7 +230,7 @@ export default function BuildPage({ onNavigate }) {
       ]
       for (const [keyword, toolId] of mentionMap) {
         if (promptLower.includes(keyword) && mcpConnections[toolId] && toolId !== 'testrail') {
-          const target = { ...mcpConnections[toolId] }
+          const target = { tool: toolId, ...mcpConnections[toolId] }
           if (toolId === 'jira') target.target_id = resolvedInputSources[0]?.item_id
           resolvedOutputTargets.push(target)
           break
@@ -529,17 +529,6 @@ export default function BuildPage({ onNavigate }) {
                   value={src.item_id || ''}
                   onChange={(e) => updateInputSource(i, { item_id: e.target.value })}
                 />
-                {src.tool === 'jira' && (
-                  <select
-                    className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm"
-                    value={src.attach_as || 'subtask'}
-                    onChange={(e) => updateInputSource(i, { attach_as: e.target.value })}
-                  >
-                    <option value="subtask">Attach scenarios as Subtask</option>
-                    <option value="comment">Attach scenarios as Comment</option>
-                    <option value="none">Don't attach back</option>
-                  </select>
-                )}
                 <button onClick={() => removeInputSource(i)} className="text-slate-400 hover:text-red-500 shrink-0"><FiX size={16} /></button>
               </div>
             ))}
@@ -555,6 +544,24 @@ export default function BuildPage({ onNavigate }) {
 
           <div className="border-t border-slate-100 pt-4 flex flex-col gap-3">
             <p className="text-sm font-medium text-slate-600">Push real data to connected tool(s) — add as many as you need</p>
+
+            {(config.input_sources || []).filter((s) => s.tool === 'jira' && s.item_id).map((src, i) => {
+              const realIndex = (config.input_sources || []).indexOf(src)
+              return (
+                <div key={src._id} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-slate-50 rounded-lg p-2.5">
+                  <span className="text-sm text-slate-500 shrink-0">Write scenarios back to {src.item_id} as:</span>
+                  <select
+                    className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm"
+                    value={src.attach_as || 'subtask'}
+                    onChange={(e) => updateInputSource(realIndex, { attach_as: e.target.value })}
+                  >
+                    <option value="subtask">Subtask</option>
+                    <option value="comment">Comment</option>
+                    <option value="none">Don't attach back</option>
+                  </select>
+                </div>
+              )
+            })}
             {(config.output_targets || []).map((tgt, i) => (
               <div key={tgt._id} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-slate-50 rounded-lg p-2.5">
                 <select
