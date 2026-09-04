@@ -30,5 +30,6 @@ class ADOConnector:
             f"{self.base_url}/_apis/wit/workitems/{work_item_id}?api-version=7.1-preview.3",
             headers=self.headers, timeout=15,
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise RuntimeError(f"ADO get_work_item failed (HTTP {resp.status_code}): {resp.text[:500]}")
         return resp.json()

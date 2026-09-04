@@ -26,5 +26,6 @@ class TestRailConnector:
             f"{self.base_url}/index.php?/api/v2/add_case/{section_id}",
             json=payload, auth=self.auth, timeout=15,
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise RuntimeError(f"TestRail add_case failed (HTTP {resp.status_code}): {resp.text[:500]}")
         return resp.json()

@@ -28,5 +28,6 @@ class GitHubConnector:
             headers=self.headers, timeout=15,
             json={"message": message, "content": content_b64, "branch": branch},
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            raise RuntimeError(f"GitHub create_file failed (HTTP {resp.status_code}): {resp.text[:500]}")
         return resp.json()

@@ -112,7 +112,11 @@ async def run_agent(cfg: AgentConfig):
                         project_key=cfg.input_credentials.get("project_key", ""),
                         summary="Generated Test Scenarios", description=body,
                     )
-                yield {"run_id": run_id, "step_name": step, "status": "success", "detail": "Scenarios attached."}
+                    yield {"run_id": run_id, "step_name": step, "status": "success", "detail": "Scenarios attached."}
+                else:
+                    yield {"run_id": run_id, "step_name": step, "status": "error",
+                           "detail": f"Attaching scenarios back to '{cfg.input_tool}' isn't wired up yet - this currently only works for Jira."}
+                    return
 
             elif step == "generate_test_cases":
                 scenarios_text = "\n".join(context.get("scenarios", []))
@@ -155,6 +159,15 @@ async def run_agent(cfg: AgentConfig):
                     path = f"generated-test-cases/test-cases-{timestamp}.md"
                     connector.create_file(path=path, content_b64=content_b64, message=f"Add generated test cases ({timestamp})")
                     pushed = len(context.get("test_cases", []))
+
+                else:
+                    # Never silently report success for a push target that
+                    # isn't actually wired up yet - that's worse than an
+                    # error, since it would look like it worked when nothing happened.
+                    yield {"run_id": run_id, "step_name": step, "status": "error",
+                           "detail": f"Pushing test cases to '{cfg.output_tool}' isn't wired up yet in Build's single-agent executor. "
+                                     f"This currently works for testrail, jira, and github here (or use Agentic Process for GitLab/Xray/Zephyr/AWS pushes)."}
+                    return
 
                 yield {"run_id": run_id, "step_name": step, "status": "success", "detail": f"Pushed {pushed} test cases to {cfg.output_tool}."}
 

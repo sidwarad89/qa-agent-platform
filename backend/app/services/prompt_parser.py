@@ -61,8 +61,37 @@ def parse_workflow(provider: str, model_version: str, api_key: str, workflow_pro
         prompt=workflow_prompt,
         max_tokens=500,
     )
-    try:
-        steps = json.loads(raw)
-        return [s for s in steps if s in KNOWN_STEPS]
-    except (json.JSONDecodeError, TypeError):
-        return []
+    return _extract_steps(raw)
+
+
+def _extract_steps(raw: str) -> list[str]:
+    """Robust against the many ways different AI models format their reply -
+    markdown code fences, a stray preamble sentence, or just plain text
+    mentioning the step names - so a slightly-off response doesn't silently
+    become 'no steps found' and confuse the user into thinking their PROMPT
+    was the problem when it was actually just a formatting quirk."""
+    import re
+
+    cleaned = raw.strip()
+    cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
+    cleaned = re.sub(r"```$", "", cleaned).strip()
+
+    match = re.search(r"\[.*\]", cleaned, re.DOTALL)
+    if match:
+        try:
+            steps = json.loads(match.group(0))
+            filtered = [s for s in steps if isinstance(s, str) and s in KNOWN_STEPS]
+            if filtered:
+                return filtered
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Last resort: the model mentioned step names in plain prose instead of
+    # JSON. Scan for them in the order they appear rather than giving up.
+    found = []
+    for step in KNOWN_STEPS:
+        idx = cleaned.find(step)
+        if idx != -1:
+            found.append((idx, step))
+    found.sort(key=lambda pair: pair[0])
+    return [step for _, step in found]
