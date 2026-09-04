@@ -113,8 +113,8 @@ export const AI_MODELS = [
       'Groq\'s free tier is genuinely generous and needs no card — great for testing.',
     ],
     versions: [
-      { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', free: true, bestFor: ['Fast responses', 'General purpose'] },
-      { id: 'deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 Distill 70B', free: true, bestFor: ['Reasoning', 'Free + fast'] },
+      { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', free: true, bestFor: ['Fast responses', 'General purpose', "Groq's current flagship"] },
+      { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', free: true, bestFor: ['Fastest + cheapest', 'High-volume tasks'] },
     ],
   },
   {

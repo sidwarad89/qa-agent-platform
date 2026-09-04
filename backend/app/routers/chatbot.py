@@ -14,10 +14,10 @@ router = APIRouter(prefix="/api/chatbot", tags=["chatbot"])
 # Set these on Render:
 #   PLATFORM_AI_PROVIDER=groq              (or anthropic, openai, gemini, mistral, xai, deepseek, together, perplexity)
 #   PLATFORM_AI_API_KEY=<your key for that provider>
-#   PLATFORM_AI_MODEL=llama-3.3-70b-versatile   (optional, this is the default for groq)
+#   PLATFORM_AI_MODEL=openai/gpt-oss-120b   (optional, this is the default for groq)
 PLATFORM_AI_PROVIDER = os.getenv("PLATFORM_AI_PROVIDER", "groq")
 PLATFORM_AI_API_KEY = os.getenv("PLATFORM_AI_API_KEY", "")
-PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "llama-3.3-70b-versatile")
+PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "openai/gpt-oss-120b")
 
 _OPENAI_COMPATIBLE_PROVIDERS = {"mistral", "xai", "groq", "deepseek", "together", "perplexity"}
 
