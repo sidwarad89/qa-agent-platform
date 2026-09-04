@@ -5,17 +5,21 @@ from pydantic import BaseModel
 
 from app.models.db_models import User
 from app.services.auth_service import get_current_user
-from app.services.ai_providers import gemini_client
+from app.services.ai_providers import anthropic_client, openai_client, gemini_client, openai_compatible_client
 
 router = APIRouter(prefix="/api/chatbot", tags=["chatbot"])
 
 # The chatbot and onboarding-plan features always use the PLATFORM's own key,
 # set once by the admin - individual users never need to provide one for these.
 # Set these on Render:
-#   PLATFORM_AI_API_KEY=<your Gemini key>
-#   PLATFORM_AI_MODEL=gemini-2.0-flash   (optional, this is the default)
+#   PLATFORM_AI_PROVIDER=groq              (or anthropic, openai, gemini, mistral, xai, deepseek, together, perplexity)
+#   PLATFORM_AI_API_KEY=<your key for that provider>
+#   PLATFORM_AI_MODEL=llama-3.3-70b-versatile   (optional, this is the default for groq)
+PLATFORM_AI_PROVIDER = os.getenv("PLATFORM_AI_PROVIDER", "groq")
 PLATFORM_AI_API_KEY = os.getenv("PLATFORM_AI_API_KEY", "")
-PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "gemini-3.6-flash")
+PLATFORM_AI_MODEL = os.getenv("PLATFORM_AI_MODEL", "llama-3.3-70b-versatile")
+
+_OPENAI_COMPATIBLE_PROVIDERS = {"mistral", "xai", "groq", "deepseek", "together", "perplexity"}
 
 PLATFORM_KNOWLEDGE = """You are the in-app assistant for "QA Agent Builder", a platform for building AI-powered
 QA automation. Answer questions ONLY about how to use this platform - be concise and practical.
@@ -47,7 +51,15 @@ def _require_configured():
 
 
 def _generate(system: str, prompt: str, max_tokens: int = 800) -> str:
-    return gemini_client.generate(PLATFORM_AI_API_KEY, PLATFORM_AI_MODEL, system, prompt, max_tokens=max_tokens)
+    if PLATFORM_AI_PROVIDER == "anthropic":
+        return anthropic_client.generate(PLATFORM_AI_API_KEY, PLATFORM_AI_MODEL, system, prompt, max_tokens=max_tokens)
+    if PLATFORM_AI_PROVIDER == "openai":
+        return openai_client.generate(PLATFORM_AI_API_KEY, PLATFORM_AI_MODEL, system, prompt, max_tokens=max_tokens)
+    if PLATFORM_AI_PROVIDER == "gemini":
+        return gemini_client.generate(PLATFORM_AI_API_KEY, PLATFORM_AI_MODEL, system, prompt, max_tokens=max_tokens)
+    if PLATFORM_AI_PROVIDER in _OPENAI_COMPATIBLE_PROVIDERS:
+        return openai_compatible_client.generate(PLATFORM_AI_API_KEY, PLATFORM_AI_MODEL, system, prompt, max_tokens=max_tokens, provider=PLATFORM_AI_PROVIDER)
+    raise HTTPException(status_code=500, detail=f"Unknown PLATFORM_AI_PROVIDER '{PLATFORM_AI_PROVIDER}'.")
 
 
 class ChatMessage(BaseModel):
