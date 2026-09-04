@@ -9,6 +9,7 @@ const initialConfig = {
   language: '',
   input_tool: '', input_credentials: {}, input_validated: false, input_item_id: '',
   output_tool: '', output_credentials: {}, output_validated: false, output_section_id: '',
+  input_sources: [], output_targets: [],
   framework: '', custom_framework_details: '',
   custom_framework_files: [],
   framework_layout: '', custom_layout_details: '',

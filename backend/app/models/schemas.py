@@ -37,6 +37,13 @@ class AgentConfig(BaseModel):
     input_credentials: Optional[Dict[str, Any]] = {}
     output_tool: Optional[str] = None
     output_credentials: Optional[Dict[str, Any]] = {}
+    # Multi-tool fetch/push - a real pipeline can pull from more than one
+    # source and push to more than one destination. Each dict carries its
+    # own "tool" key plus that tool's credentials and any extra target info
+    # (item_id, target_type, section_id, etc). Falls back to the single
+    # input_tool/output_tool fields above when not provided, for compatibility.
+    input_sources: Optional[List[Dict[str, Any]]] = None
+    output_targets: Optional[List[Dict[str, Any]]] = None
     framework: Optional[str] = None
     framework_layout: Optional[str] = None
     custom_framework_details: Optional[str] = None

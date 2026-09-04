@@ -15,6 +15,36 @@ import { FRAMEWORKS, getFramework } from '../data/frameworks'
 
 const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'json']
 
+const FETCH_TOOLS = ['jira', 'ado', 'gitlab', 'testrail']
+const PUSH_TOOLS = ['testrail', 'github', 'jira', 'gitlab', 'ado', 'xray', 'zephyr', 'aws']
+
+const ITEM_ID_PLACEHOLDER = {
+  jira: 'Jira issue key, e.g. QA-42',
+  ado: 'ADO work item ID',
+  gitlab: 'GitLab issue IID',
+  testrail: 'TestRail case ID',
+}
+
+const PUSH_TARGET_TYPE_OPTIONS = {
+  jira: [{ value: 'subtask', label: 'As Subtask' }, { value: 'comment', label: 'As Comment' }],
+  github: [{ value: 'file', label: 'To Repo File' }, { value: 'branch', label: 'To New Branch' }],
+}
+
+// null = don't show a target-id field at all for that tool; undefined key falls back to a generic placeholder
+const TARGET_ID_PLACEHOLDER = {
+  testrail: 'TestRail Section ID',
+  jira: 'Parent Issue Key (optional, e.g. QA-42)',
+  github: null,
+  gitlab: null,
+  ado: null,
+  xray: null,
+  zephyr: null,
+  aws: null,
+}
+
+let _idCounter = 0
+const newId = () => `src-${Date.now()}-${_idCounter++}`
+
 function readFileAsText(file) {
   return new Promise((resolve) => {
     const ext = file.name.split('.').pop().toLowerCase()
@@ -52,6 +82,31 @@ export default function BuildPage({ onNavigate }) {
   const framework = getFramework(config.framework)
   const savedConnection = config.ai_provider ? aiConnections[config.ai_provider] : null
   const isConnected = !!config.ai_validated && !!savedConnection && !manualOverride
+
+  // --- Multi-source fetch / multi-target push ---
+  const addInputSource = () => {
+    const firstAvailable = FETCH_TOOLS.find((t) => mcpConnections[t])
+    if (!firstAvailable) return
+    updateConfig({ input_sources: [...(config.input_sources || []), { _id: newId(), tool: firstAvailable, item_id: '', attach_as: 'subtask' }] })
+  }
+  const updateInputSource = (i, patch) => {
+    const next = [...(config.input_sources || [])]
+    next[i] = { ...next[i], ...patch }
+    updateConfig({ input_sources: next })
+  }
+  const removeInputSource = (i) => updateConfig({ input_sources: (config.input_sources || []).filter((_, idx) => idx !== i) })
+
+  const addOutputTarget = () => {
+    const firstAvailable = PUSH_TOOLS.find((t) => mcpConnections[t])
+    if (!firstAvailable) return
+    updateConfig({ output_targets: [...(config.output_targets || []), { _id: newId(), tool: firstAvailable, target_type: '', target_id: '' }] })
+  }
+  const updateOutputTarget = (i, patch) => {
+    const next = [...(config.output_targets || [])]
+    next[i] = { ...next[i], ...patch }
+    updateConfig({ output_targets: next })
+  }
+  const removeOutputTarget = (i) => updateConfig({ output_targets: (config.output_targets || []).filter((_, idx) => idx !== i) })
 
   // Auto-reconnect: whenever a provider with a remembered, validated key is
   // selected, restore it instantly instead of asking the user to type it in
@@ -143,59 +198,43 @@ export default function BuildPage({ onNavigate }) {
     }
 
     // Real MCP tool wiring: build actual credentials from the shared, already-
-    // validated connections, plus this run's specific target (item/section id).
-    // If the user didn't explicitly pick a tool from the dropdown, try to
-    // detect one straight from what they described in the prompt - this is
-    // what makes "just describe it in plain English" actually work end-to-end.
-    let effectiveInputTool = config.input_tool
-    let effectiveInputItemId = config.input_item_id
-    if (!effectiveInputTool) {
+    // validated connections for every source/target the user explicitly added,
+    // plus an auto-detect fallback so mentioning a tool in plain English still
+    // works even if the user never touched these lists at all.
+    const resolvedInputSources = (config.input_sources || [])
+      .filter((s) => s.tool && mcpConnections[s.tool])
+      .map((s) => {
+        const creds = { ...mcpConnections[s.tool], item_id: s.item_id, attach_as: s.attach_as || 'subtask' }
+        if (s.tool === 'jira' && s.item_id?.includes('-')) creds.project_key = s.item_id.split('-')[0]
+        return creds
+      })
+
+    if (resolvedInputSources.length === 0) {
       const jiraMatch = config.workflow_prompt.match(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/)
       if (jiraMatch && mcpConnections.jira) {
-        effectiveInputTool = 'jira'
-        effectiveInputItemId = jiraMatch[0]
+        resolvedInputSources.push({ ...mcpConnections.jira, item_id: jiraMatch[0], project_key: jiraMatch[0].split('-')[0], attach_as: 'subtask' })
       }
     }
 
-    let inputCredentials = null
-    if (effectiveInputTool && mcpConnections[effectiveInputTool]) {
-      inputCredentials = { ...mcpConnections[effectiveInputTool], item_id: effectiveInputItemId }
-      if (effectiveInputTool === 'jira' && effectiveInputItemId?.includes('-')) {
-        inputCredentials.project_key = effectiveInputItemId.split('-')[0]
-      }
-    }
+    const resolvedOutputTargets = (config.output_targets || [])
+      .filter((t) => t.tool && mcpConnections[t.tool])
+      .map((t) => ({ ...mcpConnections[t.tool], target_type: t.target_type, target_id: t.target_id }))
 
-    let effectiveOutputTool = config.output_tool
-    if (!effectiveOutputTool) {
+    if (resolvedOutputTargets.length === 0) {
       const promptLower = config.workflow_prompt.toLowerCase()
       const mentionMap = [
-        ['github', 'github'],
-        ['gitlab', 'gitlab'],
+        ['github', 'github'], ['gitlab', 'gitlab'],
         ['azure devops', 'ado'], ['ado', 'ado'],
-        ['testrail', 'testrail'],
-        ['xray', 'xray'],
-        ['zephyr', 'zephyr'],
-        ['codecommit', 'aws'], ['aws', 'aws'],
-        ['jira', 'jira'],
+        ['testrail', 'testrail'], ['xray', 'xray'], ['zephyr', 'zephyr'],
+        ['codecommit', 'aws'], ['aws', 'aws'], ['jira', 'jira'],
       ]
       for (const [keyword, toolId] of mentionMap) {
-        if (promptLower.includes(keyword) && mcpConnections[toolId]) {
-          // TestRail needs a section id we can't reliably extract from prose -
-          // only auto-detect it if one was already provided in the field above.
-          if (toolId === 'testrail' && !config.output_section_id) continue
-          effectiveOutputTool = toolId
+        if (promptLower.includes(keyword) && mcpConnections[toolId] && toolId !== 'testrail') {
+          const target = { ...mcpConnections[toolId] }
+          if (toolId === 'jira') target.target_id = resolvedInputSources[0]?.item_id
+          resolvedOutputTargets.push(target)
           break
         }
-      }
-    }
-
-    let outputCredentials = null
-    if (effectiveOutputTool && mcpConnections[effectiveOutputTool]) {
-      outputCredentials = { ...mcpConnections[effectiveOutputTool] }
-      if (effectiveOutputTool === 'testrail') {
-        outputCredentials.section_id = config.output_section_id
-      } else if (effectiveOutputTool === 'jira') {
-        outputCredentials.item_id = config.output_section_id || effectiveInputItemId
       }
     }
 
@@ -212,10 +251,8 @@ export default function BuildPage({ onNavigate }) {
       })),
       custom_layout_details: config.custom_layout_details,
       workflow_prompt: workflowPrompt,
-      input_tool: inputCredentials ? effectiveInputTool : null,
-      input_credentials: inputCredentials,
-      output_tool: outputCredentials ? effectiveOutputTool : null,
-      output_credentials: outputCredentials,
+      input_sources: resolvedInputSources,
+      output_targets: resolvedOutputTargets,
     }
     abortControllerRef.current = new AbortController()
     setPaused(false)
@@ -472,79 +509,92 @@ export default function BuildPage({ onNavigate }) {
             onTextChange={(t) => updateConfig({ input_details: t })}
           />
 
-          <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
-            <p className="text-sm font-medium text-slate-600">Or fetch real data from a connected tool</p>
-            <select
-              className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
-              value={config.input_tool}
-              onChange={(e) => updateConfig({ input_tool: e.target.value })}
-            >
-              <option value="">Don't fetch from a tool</option>
-              {['jira', 'ado', 'gitlab', 'testrail'].filter((t) => mcpConnections[t]).map((t) => (
-                <option key={t} value={t}>{getMcpTool(t)?.label || t}</option>
-              ))}
-            </select>
-            {['jira', 'ado', 'gitlab', 'testrail'].every((t) => !mcpConnections[t]) && (
+          <div className="border-t border-slate-100 pt-4 flex flex-col gap-3">
+            <p className="text-sm font-medium text-slate-600">Fetch real data from connected tool(s) — add as many as you need</p>
+            {(config.input_sources || []).map((src, i) => (
+              <div key={src._id} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-slate-50 rounded-lg p-2.5">
+                <select
+                  className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm"
+                  value={src.tool}
+                  onChange={(e) => updateInputSource(i, { tool: e.target.value })}
+                >
+                  {FETCH_TOOLS.filter((t) => mcpConnections[t]).map((t) => (
+                    <option key={t} value={t}>{getMcpTool(t)?.label || t}</option>
+                  ))}
+                </select>
+                <input
+                  className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm flex-1"
+                  placeholder={ITEM_ID_PLACEHOLDER[src.tool] || 'Item ID'}
+                  value={src.item_id || ''}
+                  onChange={(e) => updateInputSource(i, { item_id: e.target.value })}
+                />
+                {src.tool === 'jira' && (
+                  <select
+                    className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm"
+                    value={src.attach_as || 'subtask'}
+                    onChange={(e) => updateInputSource(i, { attach_as: e.target.value })}
+                  >
+                    <option value="subtask">Attach scenarios as Subtask</option>
+                    <option value="comment">Attach scenarios as Comment</option>
+                    <option value="none">Don't attach back</option>
+                  </select>
+                )}
+                <button onClick={() => removeInputSource(i)} className="text-slate-400 hover:text-red-500 shrink-0"><FiX size={16} /></button>
+              </div>
+            ))}
+            <button onClick={addInputSource} disabled={FETCH_TOOLS.every((t) => !mcpConnections[t])} className="text-sm text-indigo-600 font-medium flex items-center gap-1 w-fit disabled:opacity-40 disabled:cursor-not-allowed">
+              <FiPlus size={14} /> Add fetch source
+            </button>
+            {FETCH_TOOLS.every((t) => !mcpConnections[t]) && (
               <p className="text-xs text-slate-400">
-                Connect Jira, ADO, GitLab, or TestRail under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to fetch a real item here.
-              </p>
-            )}
-            {config.input_tool && (
-              <input
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
-                placeholder={
-                  config.input_tool === 'jira' ? 'Jira issue key, e.g. QA-42'
-                  : config.input_tool === 'ado' ? 'ADO work item ID'
-                  : config.input_tool === 'gitlab' ? 'GitLab issue IID'
-                  : 'TestRail case ID'
-                }
-                value={config.input_item_id}
-                onChange={(e) => updateConfig({ input_item_id: e.target.value })}
-              />
-            )}
-            {config.input_tool && (
-              <p className="text-xs text-slate-400">
-                This fetches the real item's content when the agent runs
-                {config.input_tool === 'jira' ? ', and can attach generated scenarios back to it as a subtask.' : '.'}
+                Connect Jira, ADO, GitLab, or TestRail under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to fetch real items here.
               </p>
             )}
           </div>
 
-          <div className="border-t border-slate-100 pt-4 flex flex-col gap-2">
-            <p className="text-sm font-medium text-slate-600">Push generated test cases to a connected tool (optional)</p>
-            <select
-              className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
-              value={config.output_tool}
-              onChange={(e) => updateConfig({ output_tool: e.target.value })}
-            >
-              <option value="">Don't push anywhere (or auto-detect from prompt)</option>
-              {['testrail', 'github', 'jira', 'gitlab', 'ado', 'xray', 'zephyr', 'aws'].filter((t) => mcpConnections[t]).map((t) => (
-                <option key={t} value={t}>{getMcpTool(t)?.label || t}</option>
-              ))}
-            </select>
-            {['testrail', 'github', 'jira', 'gitlab', 'ado', 'xray', 'zephyr', 'aws'].every((t) => !mcpConnections[t]) && (
+          <div className="border-t border-slate-100 pt-4 flex flex-col gap-3">
+            <p className="text-sm font-medium text-slate-600">Push real data to connected tool(s) — add as many as you need</p>
+            {(config.output_targets || []).map((tgt, i) => (
+              <div key={tgt._id} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-slate-50 rounded-lg p-2.5">
+                <select
+                  className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm"
+                  value={tgt.tool}
+                  onChange={(e) => updateOutputTarget(i, { tool: e.target.value })}
+                >
+                  {PUSH_TOOLS.filter((t) => mcpConnections[t]).map((t) => (
+                    <option key={t} value={t}>{getMcpTool(t)?.label || t}</option>
+                  ))}
+                </select>
+                {PUSH_TARGET_TYPE_OPTIONS[tgt.tool] && (
+                  <select
+                    className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm"
+                    value={tgt.target_type || PUSH_TARGET_TYPE_OPTIONS[tgt.tool][0].value}
+                    onChange={(e) => updateOutputTarget(i, { target_type: e.target.value })}
+                  >
+                    {PUSH_TARGET_TYPE_OPTIONS[tgt.tool].map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
+                {TARGET_ID_PLACEHOLDER[tgt.tool] !== null && (
+                  <input
+                    className="border border-slate-300 rounded-lg px-2.5 py-2 text-sm flex-1"
+                    placeholder={TARGET_ID_PLACEHOLDER[tgt.tool] || 'Target ID (optional)'}
+                    value={tgt.target_id || ''}
+                    onChange={(e) => updateOutputTarget(i, { target_id: e.target.value })}
+                  />
+                )}
+                <button onClick={() => removeOutputTarget(i)} className="text-slate-400 hover:text-red-500 shrink-0"><FiX size={16} /></button>
+              </div>
+            ))}
+            <button onClick={addOutputTarget} disabled={PUSH_TOOLS.every((t) => !mcpConnections[t])} className="text-sm text-indigo-600 font-medium flex items-center gap-1 w-fit disabled:opacity-40 disabled:cursor-not-allowed">
+              <FiPlus size={14} /> Add push destination
+            </button>
+            {PUSH_TOOLS.every((t) => !mcpConnections[t]) && (
               <p className="text-xs text-slate-400">
-                Connect any tool under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to push real test cases.
+                Connect any tool under <button onClick={() => onNavigate?.('mcp')} className="text-indigo-600 underline">MCP Tools</button> to push real data.
               </p>
             )}
-            {config.output_tool === 'testrail' && (
-              <input
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
-                placeholder="TestRail Section ID"
-                value={config.output_section_id}
-                onChange={(e) => updateConfig({ output_section_id: e.target.value })}
-              />
-            )}
-            {config.output_tool === 'jira' && (
-              <input
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72"
-                placeholder="Parent Issue Key (optional, e.g. QA-42)"
-                value={config.output_section_id}
-                onChange={(e) => updateConfig({ output_section_id: e.target.value })}
-              />
-            )}
             <p className="text-xs text-slate-400">
-              Tip: you don't have to pick anything here — mentioning "GitHub" or a Jira ID like QA-42 directly in your workflow prompt below will auto-connect to that tool if it's already connected.
+              Tip: you don't have to add anything here — mentioning "GitHub" or a Jira ID like QA-42 directly in your workflow prompt below will auto-connect to that tool if it's already connected.
             </p>
           </div>
         </div>

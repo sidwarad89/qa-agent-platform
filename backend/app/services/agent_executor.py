@@ -37,6 +37,25 @@ def _ai_client_for(provider: str):
     raise ValueError(f"Unknown AI provider: {provider}")
 
 
+def _resolve_input_sources(cfg: AgentConfig) -> list:
+    """Multi-source aware: uses cfg.input_sources if the frontend sent a real
+    list, otherwise falls back to the single legacy input_tool/credentials
+    fields so older payloads keep working unchanged."""
+    if cfg.input_sources:
+        return cfg.input_sources
+    if cfg.input_tool:
+        return [{"tool": cfg.input_tool, **(cfg.input_credentials or {})}]
+    return []
+
+
+def _resolve_output_targets(cfg: AgentConfig) -> list:
+    if cfg.output_targets:
+        return cfg.output_targets
+    if cfg.output_tool:
+        return [{"tool": cfg.output_tool, **(cfg.output_credentials or {})}]
+    return []
+
+
 async def run_agent(cfg: AgentConfig):
     """Async generator yielding dict step results as the agent progresses."""
     run_id = str(uuid.uuid4())
@@ -64,13 +83,20 @@ async def run_agent(cfg: AgentConfig):
         yield {"run_id": run_id, "step_name": step, "status": "running", "detail": f"Running {step}..."}
         try:
             if step == "fetch_input_item":
-                summary = mcp_dispatch.fetch_item_summary(
-                    tool=cfg.input_tool, credentials=cfg.input_credentials,
-                    item_id=cfg.input_credentials.get("item_id", ""),
-                )
-                context["input_item_summary"] = summary
+                sources = _resolve_input_sources(cfg)
+                if not sources:
+                    yield {"run_id": run_id, "step_name": step, "status": "error", "detail": "No input source configured."}
+                    return
+                summaries = []
+                fetched_from = []
+                for src in sources:
+                    summary = mcp_dispatch.fetch_item_summary(tool=src.get("tool"), credentials=src, item_id=src.get("item_id", ""))
+                    summaries.append(f"[From {src.get('tool')} - {src.get('item_id', '')}]\n{summary}")
+                    fetched_from.append(f"{src.get('tool')}:{src.get('item_id', '')}")
+                context["input_item_summary"] = "\n\n".join(summaries)
+                context["input_sources_resolved"] = sources
                 yield {"run_id": run_id, "step_name": step, "status": "success",
-                       "detail": f"Fetched {cfg.input_credentials.get('item_id', '')} from {cfg.input_tool}."}
+                       "detail": f"Fetched {', '.join(fetched_from)}."}
 
             elif step == "generate_test_scenarios":
                 summary = context.get("input_item_summary", "")[:3000]
@@ -84,29 +110,38 @@ async def run_agent(cfg: AgentConfig):
                        "detail": f"Generated {len(context['scenarios'])} scenarios.", "output": context["scenarios"]}
 
             elif step == "attach_scenarios_to_input":
-                if cfg.input_tool == "jira":
-                    legacy = JiraConnector(
-                        base_url=cfg.input_credentials.get("base_url", ""),
-                        username=cfg.input_credentials.get("username", ""),
-                        api_key=cfg.input_credentials.get("api_key", ""),
-                    )
-                    body = "\n".join(f"- {s}" for s in context.get("scenarios", []))
-                    result = legacy.create_subtask(
-                        parent_issue_id=cfg.input_credentials.get("item_id", ""),
-                        project_key=cfg.input_credentials.get("project_key", ""),
-                        summary="Generated Test Scenarios", description=body,
-                    )
-                    created_key = result.get("key", "")
-                    context.setdefault("created_items", []).append({"tool": "jira", "id": created_key, "what": "scenarios subtask"})
-                    yield {"run_id": run_id, "step_name": step, "status": "success",
-                           "detail": f"Scenarios attached as {created_key}." if created_key else "Scenarios attached."}
-                else:
-                    # "Attach to the same item" is inherently a ticket-tracker
-                    # concept (subtask/comment) - it doesn't map cleanly onto
-                    # code repos, test-case libraries, or CI tools the same way.
+                sources = context.get("input_sources_resolved") or _resolve_input_sources(cfg)
+                jira_sources = [s for s in sources if s.get("tool") == "jira" and s.get("attach_as", "subtask") != "none"]
+                if not jira_sources:
                     yield {"run_id": run_id, "step_name": step, "status": "error",
-                           "detail": f"Attaching scenarios back to the same item only works for Jira right now (input tool was '{cfg.input_tool}')."}
+                           "detail": "Attaching scenarios back to the same item only works for Jira right now, and needs at least one Jira input source with 'Attach as' set."}
                     return
+
+                body = "\n".join(f"- {s}" for s in context.get("scenarios", []))
+                attached_to = []
+                for src in jira_sources:
+                    attach_as = src.get("attach_as", "subtask")
+                    if attach_as == "comment":
+                        from app.services.mcp.jira_connector import JiraConnector as NewJiraConnector
+                        new_connector = NewJiraConnector(base_url=src.get("base_url", ""), email=src.get("username", ""), api_token=src.get("api_key", ""))
+                        result = new_connector.execute(
+                            method="POST", resource="comment", item_id=src.get("item_id", ""),
+                            payload={"body": {"type": "doc", "version": 1,
+                                     "content": [{"type": "paragraph", "content": [{"type": "text", "text": f"Generated Test Scenarios:\n{body}"}]}]}},
+                        )
+                        if not result.get("success"):
+                            raise RuntimeError(f"Jira add comment failed (HTTP {result.get('status_code')}): {result.get('detail')}")
+                    else:
+                        legacy = JiraConnector(base_url=src.get("base_url", ""), username=src.get("username", ""), api_key=src.get("api_key", ""))
+                        result = legacy.create_subtask(
+                            parent_issue_id=src.get("item_id", ""), project_key=src.get("project_key", ""),
+                            summary="Generated Test Scenarios", description=body,
+                        )
+                        created_key = result.get("key", "")
+                        if created_key:
+                            context.setdefault("created_items", []).append({"tool": "jira", "id": created_key, "what": "scenarios subtask"})
+                    attached_to.append(f"{src.get('item_id', '')} (as {attach_as})")
+                yield {"run_id": run_id, "step_name": step, "status": "success", "detail": f"Scenarios attached to: {', '.join(attached_to)}."}
 
             elif step == "generate_test_cases":
                 scenarios_text = "\n".join(context.get("scenarios", []))
@@ -121,20 +156,33 @@ async def run_agent(cfg: AgentConfig):
                        "detail": f"Generated {len(context['test_cases'])} test cases.", "output": context["test_cases"]}
 
             elif step == "push_test_cases_to_output":
-                target_id = cfg.output_credentials.get("item_id") or cfg.output_credentials.get("section_id") or cfg.input_credentials.get("item_id", "")
-                pushed, url = mcp_dispatch.push_test_cases(
-                    tool=cfg.output_tool, credentials=cfg.output_credentials,
-                    target_id=target_id, test_cases=context.get("test_cases", []),
-                )
-                detail = f"Pushed {pushed} test cases to {cfg.output_tool}."
-                if url:
-                    detail += f" View: {url}"
-                yield {"run_id": run_id, "step_name": step, "status": "success", "detail": detail, "output_url": url}
+                targets = _resolve_output_targets(cfg)
+                if not targets:
+                    yield {"run_id": run_id, "step_name": step, "status": "error", "detail": "No push destination configured."}
+                    return
+                total_pushed = 0
+                detail_parts = []
+                last_url = None
+                for tgt in targets:
+                    target_id = tgt.get("target_id") or tgt.get("item_id") or tgt.get("section_id") or ""
+                    pushed, url = mcp_dispatch.push_test_cases(
+                        tool=tgt.get("tool"), credentials=tgt,
+                        target_id=target_id, test_cases=context.get("test_cases", []),
+                    )
+                    total_pushed += pushed
+                    detail_parts.append(f"{pushed} to {tgt.get('tool')}")
+                    if url:
+                        last_url = url
+                detail = f"Pushed test cases — {', '.join(detail_parts)}."
+                if last_url:
+                    detail += f" View: {last_url}"
+                yield {"run_id": run_id, "step_name": step, "status": "success", "detail": detail, "output_url": last_url}
 
             elif step == "fetch_test_cases_from_output":
-                if cfg.output_tool == "github":
+                github_target = next((t for t in _resolve_output_targets(cfg) if t.get("tool") == "github"), None)
+                if github_target:
                     from app.services.connectors.github_connector import GitHubConnector as LegacyGitHubConnector
-                    connector = LegacyGitHubConnector(repo=cfg.output_credentials.get("repo", ""), api_key=cfg.output_credentials.get("api_key", ""))
+                    connector = LegacyGitHubConnector(repo=github_target.get("repo", ""), api_key=github_target.get("api_key", ""))
                     files = connector.list_directory("generated-test-cases")
                     if not files:
                         yield {"run_id": run_id, "step_name": step, "status": "error",
@@ -149,7 +197,7 @@ async def run_agent(cfg: AgentConfig):
                            "output": context["test_cases"]}
                 else:
                     yield {"run_id": run_id, "step_name": step, "status": "error",
-                           "detail": f"Fetching test cases back from '{cfg.output_tool}' isn't wired up yet — this currently only works for GitHub."}
+                           "detail": "Fetching test cases back isn't wired up yet for any tool other than GitHub — add a GitHub push destination first."}
                     return
 
             elif step == "generate_automation_scripts":
@@ -163,9 +211,10 @@ async def run_agent(cfg: AgentConfig):
                        "detail": "Automation scripts generated.", "output": scripts}
 
             elif step == "push_scripts_to_new_branch":
-                if cfg.output_tool != "github":
+                github_target = next((t for t in _resolve_output_targets(cfg) if t.get("tool") == "github"), None)
+                if not github_target:
                     yield {"run_id": run_id, "step_name": step, "status": "error",
-                           "detail": "Pushing scripts to a new branch currently only works when GitHub is the selected output tool."}
+                           "detail": "Pushing scripts to a new branch needs a GitHub push destination configured."}
                     return
                 if not context.get("scripts"):
                     yield {"run_id": run_id, "step_name": step, "status": "error",
@@ -173,7 +222,7 @@ async def run_agent(cfg: AgentConfig):
                     return
 
                 from app.services.connectors.github_connector import GitHubConnector as LegacyGitHubConnector
-                connector = LegacyGitHubConnector(repo=cfg.output_credentials.get("repo", ""), api_key=cfg.output_credentials.get("api_key", ""))
+                connector = LegacyGitHubConnector(repo=github_target.get("repo", ""), api_key=github_target.get("api_key", ""))
                 branch_name = f"automation-scripts-{uuid.uuid4().hex[:8]}"
                 connector.create_branch(branch_name)
 
